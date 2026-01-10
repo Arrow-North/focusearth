@@ -1,14 +1,15 @@
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { User, ExternalLink } from "lucide-react";
 
 const notifications = [
-  { id: 1, user: "Pete Musser", action: "submitted Focus Earth Supplier Corporation for review and authorization", date: "Jan 09, 2026" },
-  { id: 2, user: "Focus Supplier", action: "submitted LED LAMPS Company for review and authorization", date: "Dec 11, 2025" },
-  { id: 3, user: "Narek Simonyan", action: "suggested edits to Real Estate Company for review and authorization", date: "Dec 09, 2025" },
-  { id: 4, user: "Pete REU Musser", action: "suggested edits to Focus Earth Real Estate for review and authorization", date: "Dec 05, 2025" },
-  { id: 5, user: "Narek Simonyan", action: "suggested edits to Real Estate Company for review and authorization", date: "Dec 04, 2025" },
-  { id: 6, user: "Narek Simonyan", action: "suggested edits to Real Estate Company for review and authorization", date: "Dec 04, 2025" },
+  { id: 1, user: "Pete Musser", action: "submitted Focus Earth Supplier Corporation for review and authorization", date: "Jan 09, 2026", companyId: "1" },
+  { id: 2, user: "Focus Supplier", action: "submitted LED LAMPS Company for review and authorization", date: "Dec 11, 2025", companyId: "2" },
+  { id: 3, user: "Narek Simonyan", action: "suggested edits to Real Estate Company for review and authorization", date: "Dec 09, 2025", companyId: "1" },
+  { id: 4, user: "Pete REU Musser", action: "suggested edits to Focus Earth Real Estate for review and authorization", date: "Dec 05, 2025", companyId: "1" },
+  { id: 5, user: "Narek Simonyan", action: "suggested edits to Real Estate Company for review and authorization", date: "Dec 04, 2025", companyId: "1" },
+  { id: 6, user: "Narek Simonyan", action: "suggested edits to Real Estate Company for review and authorization", date: "Dec 04, 2025", companyId: "1" },
 ];
 
 const recentActivity = [
@@ -34,6 +35,8 @@ const colorMap = {
 };
 
 export default function RecentActivity() {
+  const navigate = useNavigate();
+
   return (
     <DashboardLayout title="Recent Activity">
       <div className="space-y-8">
@@ -56,7 +59,11 @@ export default function RecentActivity() {
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="text-sm text-muted-foreground">{notification.date}</span>
-                  <Button size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                  <Button 
+                    size="sm" 
+                    className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                    onClick={() => navigate(`/companies/${notification.companyId}`)}
+                  >
                     <User className="h-4 w-4 mr-2" />
                     View Company
                   </Button>
