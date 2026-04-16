@@ -70,7 +70,7 @@ jobs:
           node -e "
           const { Client } = require('pg');
           const client = new Client({
-            connectionString: 'postgresql://postgres.${{ env.PROJECT_ID }}:${{ secrets.SB_PROD_PASSWORD }}@aws-0-us-west-2.pooler.supabase.com:5432/postgres'
+            connectionString: 'postgresql://postgres.${{ env.PROJECT_ID }}:${{ secrets.SB_PROD_PASSWORD }}@aws-0-us-east-1.pooler.supabase.com:5432/postgres'
           });
           client.connect()
             .then(() => client.query('CREATE SCHEMA IF NOT EXISTS supabase_migrations;'))
@@ -86,14 +86,14 @@ jobs:
           npx supabase db push --password ${{ secrets.SB_PROD_PASSWORD }} \
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SB_ACCESS_TOKEN }}
-          DATABASE_URL: postgresql://postgres.${{ env.PROJECT_ID }}:${{ secrets.SB_PROD_PASSWORD }}@aws-0-us-west-2.pooler.supabase.com:5432/postgres
+          DATABASE_URL: postgresql://postgres.${{ env.PROJECT_ID }}:${{ secrets.SB_PROD_PASSWORD }}@aws-0-us-east-1.pooler.supabase.com:5432/postgres
 
       - name: Deploy Supabase Functions
         run: |
           npx supabase functions deploy --project-ref ${{ env.PROJECT_ID }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SB_ACCESS_TOKEN }}
-          DATABASE_URL: postgresql://postgres.${{ env.PROJECT_ID }}:${{ secrets.SB_PROD_PASSWORD }}@aws-0-us-west-2.pooler.supabase.com:5432/postgres
+          DATABASE_URL: postgresql://postgres.${{ env.PROJECT_ID }}:${{ secrets.SB_PROD_PASSWORD }}@aws-0-us-east-1.pooler.supabase.com:5432/postgres
           VITE_SUPABASE_URL: https://${{ env.PROJECT_ID }}.supabase.co
           VITE_SUPABASE_ANON_KEY: ${{ secrets.SB_PROD_ANON_KEY }}
           VITE_SUPABASE_SERVICE_KEY: ${{ secrets.SB_PROD_SERVICE_KEY }}
