@@ -1,0 +1,99 @@
+name: Deploy resources to Supabase
+env:
+  NODE_ENV: production
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy from (e.g., main, develop, staging)"
+        required: true
+        type: string
+        default: "main"
+      confirm:
+        description: "Are you Sure?"
+        required: false
+        type: boolean
+
+jobs:
+  run:
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      checks: write
+      deployments: write
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SB_ACCESS_TOKEN }}
+      PROJECT_ID: ${{ secrets.SB_PROD_PROJECT_ID }}
+      VITE_SUPABASE_URL: ${{ secrets.SB_PROD_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.SB_PROD_ANON_KEY }}
+      VITE_SUPABASE_SERVICE_KEY: ${{ secrets.SB_PROD_SERVICE_KEY }}
+      VITE_ENV: production
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-prod-sb
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ inputs.branch }}
+          persist-credentials: false
+
+      - name: Getting repo Deployment actions
+        uses: Arrow-North/deployment-action@v1.0
+        id: deployment
+        with:
+          token: "${{ github.token }}"
+          environment: production
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: 18.x
+
+      - name: Sets branch name as env var
+        uses: Arrow-North/branch-name@v1.0
+
+      - name: Install dependencies
+        run: npm install --force
+
+      - name: Create supabase_migrations schema if not exists
+        run: |
+          npm install pg
+          node -e "
+          const { Client } = require('pg');
+          const client = new Client({
+            connectionString: 'postgresql://postgres.${{ env.PROJECT_ID }}:${{ secrets.SB_PROD_PASSWORD }}@aws-0-us-west-2.pooler.supabase.com:5432/postgres'
+          });
+          client.connect()
+            .then(() => client.query('CREATE SCHEMA IF NOT EXISTS supabase_migrations;'))
+            .then(() => { console.log('Schema created or already exists'); return client.end(); })
+            .catch(err => { console.log('Note:', err.message); process.exit(0); });
+          "
+        continue-on-error: true
+
+      - name: Run the DB Migrations
+        run: |
+          npx supabase link --project-ref ${{ env.PROJECT_ID }} --password ${{ secrets.SB_PROD_PASSWORD }} && \
+          npx supabase migration list --password ${{ secrets.SB_PROD_PASSWORD }} && \
+          npx supabase db push --password ${{ secrets.SB_PROD_PASSWORD }} \
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SB_ACCESS_TOKEN }}
+          DATABASE_URL: postgresql://postgres.${{ env.PROJECT_ID }}:${{ secrets.SB_PROD_PASSWORD }}@aws-0-us-west-2.pooler.supabase.com:5432/postgres
+
+      - name: Deploy Supabase Functions
+        run: |
+          npx supabase functions deploy --project-ref ${{ env.PROJECT_ID }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SB_ACCESS_TOKEN }}
+          DATABASE_URL: postgresql://postgres.${{ env.PROJECT_ID }}:${{ secrets.SB_PROD_PASSWORD }}@aws-0-us-west-2.pooler.supabase.com:5432/postgres
+          VITE_SUPABASE_URL: https://${{ env.PROJECT_ID }}.supabase.co
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SB_PROD_ANON_KEY }}
+          VITE_SUPABASE_SERVICE_KEY: ${{ secrets.SB_PROD_SERVICE_KEY }}
