@@ -1,0 +1,36 @@
+-- 05_reports.sql
+-- report table
+
+CREATE TABLE report (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES project(id),
+  created_by_id UUID REFERENCES profiles(id),
+  status VARCHAR(255) NOT NULL,
+  notes TEXT,
+  sort_id INTEGER,
+  proposal JSONB NOT NULL,
+  proposal_name VARCHAR(255) NOT NULL,
+  system_price VARCHAR(255),
+  led_price VARCHAR(255),
+  cost_year VARCHAR(255),
+  added_cri VARCHAR(255),
+  added_lumens VARCHAR(255),
+  payback VARCHAR(255),
+  bidding BOOLEAN NOT NULL,
+  etadays VARCHAR(255),
+  installation JSONB,
+  custom_pricing JSONB,
+  availability DATE,
+  light_count_waiver VARCHAR(255) DEFAULT '0',
+  rebates VARCHAR(255) DEFAULT '0',
+  shipping VARCHAR(255) DEFAULT '0',
+  color_tunable VARCHAR(255) DEFAULT '0',
+  tax VARCHAR(255) DEFAULT '0',
+  sensors VARCHAR(255) DEFAULT '0',
+  kwreduced VARCHAR(255) DEFAULT '0',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  approved BOOLEAN NOT NULL,
+  active BOOLEAN NOT NULL,
+  lumen_increase_sq_ft VARCHAR(255) DEFAULT '0',
+  lumen_increase_fixture VARCHAR(255) DEFAULT '0'
+);

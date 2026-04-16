@@ -1,6 +1,7 @@
 import { Menu, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 interface HeaderProps {
   title: string;
@@ -26,6 +27,7 @@ export function Header({ title, onMenuClick, showSearch = true, actions }: Heade
       
       <div className="flex items-center gap-3">
         {actions}
+        <NotificationBell />
         {showSearch && (
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-header-foreground/60" />

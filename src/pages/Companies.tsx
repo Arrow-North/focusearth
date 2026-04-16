@@ -1,43 +1,70 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { SlidersHorizontal, Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useCompanies } from "@/hooks/use-companies";
+import { useDebounce } from "@/hooks/use-debounce";
+import { SlidersHorizontal, Plus, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 
-const companies = [
-  { 
-    id: 1, 
-    name: "Focus Earth Real Estate", 
-    stripe: "purple" as const,
-    logo: "🌍",
-    hasEmoji: true
-  },
-  { 
-    id: 2, 
-    name: "LED LAMPS Company", 
-    stripe: "yellow" as const,
-    image: "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?w=100&h=100&fit=crop",
-    hasEmoji: false
-  },
-];
-
-const colorMap = {
-  yellow: "bg-status-yellow",
-  purple: "bg-status-purple",
-  teal: "bg-status-teal",
-  blue: "bg-status-blue",
-  pink: "bg-status-pink",
-  orange: "bg-status-orange",
-  green: "bg-status-green",
-  brown: "bg-status-brown",
+const typeColorMap: Record<string, string> = {
+  REU: "bg-status-purple",
+  SU: "bg-status-yellow",
+  EU: "bg-status-teal",
 };
 
 export default function Companies() {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+
+  const debouncedSearch = useDebounce(search, 300);
+
+  const { data, isLoading } = useCompanies({
+    search: debouncedSearch || undefined,
+    type: typeFilter,
+    page,
+    pageSize,
+  });
+
+  const companies = data?.rows ?? [];
+  const totalCount = data?.total_count ?? 0;
+  const totalPages = Math.ceil(totalCount / pageSize);
+
   const headerActions = (
     <>
-      <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-        <SlidersHorizontal className="h-4 w-4 mr-2" />
-        Filter
-      </Button>
-      <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
+      <Select
+        value={typeFilter ?? "all"}
+        onValueChange={(value) => {
+          setTypeFilter(value === "all" ? null : value);
+          setPage(1);
+        }}
+      >
+        <SelectTrigger className="w-[160px]">
+          <SlidersHorizontal className="h-4 w-4 mr-2" />
+          <SelectValue placeholder="Filter by type" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Types</SelectItem>
+          <SelectItem value="REU">REU</SelectItem>
+          <SelectItem value="SU">SU</SelectItem>
+          <SelectItem value="EU">EU</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Button
+        className="bg-accent hover:bg-accent/90 text-accent-foreground"
+        onClick={() => navigate("/companies/create")}
+      >
         <Plus className="h-4 w-4 mr-2" />
         Add New Company
       </Button>
@@ -46,36 +73,98 @@ export default function Companies() {
 
   return (
     <DashboardLayout title="Companies" actions={headerActions}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {companies.map((company) => (
-          <div
-            key={company.id}
-            className="bg-card rounded-lg border border-border flex items-center overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
-          >
-            {/* Color stripe */}
-            <div className={`w-1.5 h-16 ${colorMap[company.stripe]}`} />
-            
-            <div className="flex items-center gap-3 p-4 flex-1">
-              {/* Logo */}
-              {company.hasEmoji ? (
-                <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-2xl">
-                  {company.logo}
-                </div>
-              ) : (
-                <div className="w-10 h-10 rounded overflow-hidden">
-                  <img
-                    src={company.image}
-                    alt={company.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              )}
-              
-              <span className="font-medium text-foreground">{company.name}</span>
-            </div>
-          </div>
-        ))}
+      {/* Search input */}
+      <div className="relative mb-6 max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search companies..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          className="pl-9"
+        />
       </div>
+
+      {/* Loading state */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : companies.length === 0 ? (
+        /* Empty state */
+        <div className="flex items-center justify-center py-20 text-muted-foreground">
+          No companies found
+        </div>
+      ) : (
+        /* Company grid */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {companies.map((company) => (
+            <div
+              key={company.id}
+              onClick={() => navigate(`/companies/${company.id}`)}
+              className="bg-card rounded-lg border border-border flex items-center overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+            >
+              {/* Color stripe */}
+              <div
+                className={`w-1.5 h-16 ${
+                  typeColorMap[company.type ?? ""] ?? "bg-muted"
+                }`}
+              />
+
+              <div className="flex items-center gap-3 p-4 flex-1">
+                {/* Company image or placeholder */}
+                {company.image ? (
+                  <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
+                    <img
+                      src={company.image}
+                      alt={company.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-lg font-semibold text-muted-foreground flex-shrink-0">
+                    {company.name?.charAt(0)?.toUpperCase() ?? "?"}
+                  </div>
+                )}
+
+                <span className="font-medium text-foreground truncate">
+                  {company.name}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
+          <p className="text-sm text-muted-foreground">
+            Showing {(page - 1) * pageSize + 1}&ndash;{Math.min(page * pageSize, totalCount)} of{' '}
+            {totalCount} companies
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium">
+              {page} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
