@@ -3,6 +3,29 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import type { Product, PaginatedResult, ProductDetails } from '@/types/database';
 
+export function useCategoryCounts() {
+  return useQuery({
+    queryKey: ['products', 'category-counts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('product')
+        .select('airtable_colum_name');
+
+      if (error) throw error;
+
+      const counts: Record<string, number> = {};
+      let total = 0;
+      for (const row of data ?? []) {
+        const cat = row.airtable_colum_name;
+        counts[cat] = (counts[cat] ?? 0) + 1;
+        total++;
+      }
+      counts['all-products'] = total;
+      return counts;
+    },
+  });
+}
+
 interface ProductFilters {
   companyId?: number;
   projectId?: number;
