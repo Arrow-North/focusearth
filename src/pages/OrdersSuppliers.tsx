@@ -2,11 +2,12 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { cn } from "@/lib/utils";
-import { useEstimates } from "@/hooks/use-estimates";
+import { useEstimates, useUnarchiveEstimate } from "@/hooks/use-estimates";
 import { usePagination } from "@/hooks/use-pagination";
 import { formatDate } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import type { EstimateSU } from "@/types/database";
 
 const tabs = [
@@ -52,12 +53,44 @@ export default function OrdersSuppliers() {
   const [activeTab, setActiveTab] = useState("Estimates");
   const navigate = useNavigate();
   const { page, pageSize, nextPage, prevPage } = usePagination(20);
+  const unarchiveMutation = useUnarchiveEstimate();
 
   const { data, isLoading } = useEstimates({
     tableType: "estimate",
     page,
     pageSize,
   });
+
+  const handleRestore = (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    unarchiveMutation.mutate({ estimateId: id, tableType: "estimate" });
+  };
+
+  const getStatusBadge = (item: EstimateSU) => {
+    if (item.marked_fulfilled) {
+      return (
+        <Badge variant="default" className="bg-green-600">
+          Fulfilled
+        </Badge>
+      );
+    }
+    if (item.is_receipt) {
+      return <Badge variant="secondary">Receipt</Badge>;
+    }
+    if (item.is_invoice) {
+      return <Badge variant="secondary">Invoice</Badge>;
+    }
+    if (item.is_shipping) {
+      return <Badge variant="secondary">Shipping</Badge>;
+    }
+    if (item.is_order) {
+      return <Badge variant="default">Order</Badge>;
+    }
+    if (item.su_approved) {
+      return <Badge variant="outline">Approved</Badge>;
+    }
+    return <Badge variant="outline">Pending</Badge>;
+  };
 
   const allRows = (data?.rows ?? []) as EstimateSU[];
   const filteredRows = useMemo(
@@ -138,21 +171,41 @@ export default function OrdersSuppliers() {
                         {item.order_uid || "-"}
                       </td>
                       <td className="py-3 text-muted-foreground">
-                        {formatDate(item.created_at)}
+                        <div className="flex flex-col gap-0.5">
+                          <span>{formatDate(item.created_at)}</span>
+                          {item.order_date_created && (
+                            <span className="text-xs text-muted-foreground/70">
+                              Order: {formatDate(item.order_date_created)}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="py-3 text-muted-foreground">
-                        {item.su_approved ? "Approved" : "Pending"}
+                      <td className="py-3">
+                        {getStatusBadge(item)}
                       </td>
                       <td className="py-3 text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            navigate(`/orders/suppliers/${item.id}`)
-                          }
-                        >
-                          View
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          {activeTab === "Archived" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => handleRestore(e, item.id)}
+                              disabled={unarchiveMutation.isPending}
+                              title="Restore"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              navigate(`/orders/suppliers/${item.id}`)
+                            }
+                          >
+                            View
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
