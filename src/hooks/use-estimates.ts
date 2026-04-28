@@ -424,3 +424,178 @@ export function useArchiveEstimate() {
     },
   });
 }
+
+export function useUnarchiveEstimate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { estimateId: number; tableType: EstimateTableType }) => {
+      const { data, error } = await supabase.rpc('fn_unarchive_estimate', {
+        p_estimate_id: params.estimateId,
+        p_table_type: params.tableType,
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['estimates'] });
+      queryClient.invalidateQueries({
+        queryKey: ['estimate', variables.estimateId, variables.tableType],
+      });
+      toast.success('Estimate restored');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to restore estimate: ${error.message}`);
+    },
+  });
+}
+
+// --- Shipping Detail Queries & Mutations ---
+
+export function useShippingDetails(estimateId: number | undefined, tableType: EstimateTableType) {
+  return useQuery({
+    queryKey: ['shipping-details', estimateId, tableType],
+    queryFn: async () => {
+      if (!estimateId) throw new Error('Estimate ID is required');
+
+      const column = tableType === 'estimate' ? 'estimate_su_id' : 'estimate_reu_id';
+      const { data, error } = await supabase
+        .from('shipping_detail')
+        .select('*')
+        .eq(column, estimateId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!estimateId,
+  });
+}
+
+export function useDeleteShipping() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { shippingId: number }) => {
+      const { error } = await supabase
+        .from('shipping_detail')
+        .delete()
+        .eq('id', params.shippingId);
+
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shipping-details'] });
+      toast.success('Shipping detail deleted');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete shipping: ${error.message}`);
+    },
+  });
+}
+
+// --- Invoice File Queries & Mutations ---
+
+export function useInvoiceFiles(estimateId: number | undefined) {
+  return useQuery({
+    queryKey: ['invoice-files', estimateId],
+    queryFn: async () => {
+      if (!estimateId) throw new Error('Estimate ID is required');
+
+      const { data, error } = await supabase
+        .from('uploads_invoice')
+        .select('*')
+        .eq('estimate_id', estimateId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!estimateId,
+  });
+}
+
+export function useDeleteInvoiceFile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { fileId: number; storagePath: string }) => {
+      // Delete from storage first
+      const { error: storageError } = await supabase.storage
+        .from('uploads')
+        .remove([params.storagePath]);
+
+      if (storageError) throw storageError;
+
+      // Then delete from database
+      const { error } = await supabase
+        .from('uploads_invoice')
+        .delete()
+        .eq('id', params.fileId);
+
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoice-files'] });
+      toast.success('Invoice file deleted');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete invoice file: ${error.message}`);
+    },
+  });
+}
+
+// --- Receipt File Queries & Mutations ---
+
+export function useReceiptFiles(estimateId: number | undefined) {
+  return useQuery({
+    queryKey: ['receipt-files', estimateId],
+    queryFn: async () => {
+      if (!estimateId) throw new Error('Estimate ID is required');
+
+      const { data, error } = await supabase
+        .from('uploads_receipt')
+        .select('*')
+        .eq('estimate_id', estimateId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!estimateId,
+  });
+}
+
+export function useDeleteReceiptFile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { fileId: number; storagePath: string }) => {
+      // Delete from storage first
+      const { error: storageError } = await supabase.storage
+        .from('uploads')
+        .remove([params.storagePath]);
+
+      if (storageError) throw storageError;
+
+      // Then delete from database
+      const { error } = await supabase
+        .from('uploads_receipt')
+        .delete()
+        .eq('id', params.fileId);
+
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['receipt-files'] });
+      toast.success('Receipt file deleted');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete receipt file: ${error.message}`);
+    },
+  });
+}
