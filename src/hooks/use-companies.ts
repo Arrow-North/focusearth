@@ -88,7 +88,7 @@ export function useCreateCompany() {
       country: string;
       website?: string;
       notes?: string;
-      property_priorities?: Array<{ name: string; percentage: number }>;
+      property_priorities?: Array<{ name: string; percentage: number; color?: string }>;
       service_areas?: Array<{ state?: string; city?: string }>;
     }) => {
       const { data, error } = await supabase.rpc('fn_create_company', {
@@ -108,7 +108,8 @@ export function useCreateCompany() {
       });
 
       if (error) throw error;
-      return data as unknown as Company;
+      // fn_create_company returns the new company ID as an INTEGER
+      return data as number;
     },
     onSuccess: () => {
       toast.success('Company created successfully');
@@ -227,8 +228,10 @@ export function useAcceptInvite() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.rpc('fn_accept_company_invite');
+    mutationFn: async (companyId: number) => {
+      const { error } = await supabase.rpc('fn_accept_company_invite', {
+        p_company_id: companyId,
+      });
       if (error) throw error;
     },
     onSuccess: () => {

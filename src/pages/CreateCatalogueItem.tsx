@@ -18,6 +18,22 @@ import {
 import { Check, ImagePlus } from "lucide-react";
 import type { ProductDetails } from "@/types/database";
 
+const CCT_OPTIONS = ["2700K", "3000K", "3500K", "4000K", "5000K", "OtherK"];
+const APPLICATION_OPTIONS = ["Indoor", "Outdoor", "Indoor/Outdoor"];
+const CERTIFICATIONS_OPTIONS = [
+  "CE Marketing, DLC Approved, Energy Star",
+  "DLC Approved",
+  "Energy Star",
+  "UL Listed",
+  "ETL",
+  "CE Marketing",
+  "None",
+];
+const BUY_AMERICA_OPTIONS = ["Yes", "No"];
+const OPTICS_OPTIONS = ["None", "Diffused", "Spot", "Flood", "Wide Flood"];
+const DIMMABILITY_OPTIONS = ["0-10V", "TRIAC", "DALI", "None"];
+const COLOR_TUNABLE_OPTIONS = ["Yes", "No"];
+
 const INITIAL_DETAILS: ProductDetails = {
   description: "",
   supplier: "Focus Earth",
@@ -68,6 +84,61 @@ const INITIAL_DETAILS: ProductDetails = {
   notes: "",
 };
 
+type FieldDef = {
+  key: keyof ProductDetails;
+  label: string;
+  type?: "select";
+  options?: string[];
+};
+
+// Column 1: Dimensions + physical attributes
+const COL_1_FIELDS: FieldDef[] = [
+  { key: "length", label: "Dimensions - Length (in):" },
+  { key: "width", label: "Dimensions - Width (in):" },
+  { key: "diameter", label: "Dimensions - Diameter (in):" },
+  { key: "depth", label: "Dimensions - Depth (in):" },
+  { key: "application", label: "Application:", type: "select", options: APPLICATION_OPTIONS },
+  { key: "style", label: "Style:" },
+  { key: "mount", label: "Mount:" },
+  { key: "shape", label: "Shape:" },
+  { key: "lensType", label: "Lens Type:" },
+  { key: "ingressProtection", label: "Ingress Protection:" },
+  { key: "fixtureColor", label: "Fixture Color:" },
+  { key: "trim", label: "Trim:" },
+];
+
+// Column 2: Electrical & performance
+const COL_2_FIELDS: FieldDef[] = [
+  { key: "wattage", label: "Wattage:" },
+  { key: "lumens", label: "Lumens:" },
+  { key: "cct", label: "CCT (K°):", type: "select", options: CCT_OPTIONS },
+  { key: "cri", label: "CRI:" },
+  { key: "l70Lifetime", label: "L70 Lifetime (hours):" },
+  { key: "warranty", label: "Warranty (years):" },
+  { key: "voltageMin", label: "Voltage (min):" },
+  { key: "voltageMax", label: "Voltage (max):" },
+  { key: "dimmability", label: "Dimmability:", type: "select", options: DIMMABILITY_OPTIONS },
+  { key: "colorTunable", label: "Color Tunable:", type: "select", options: COLOR_TUNABLE_OPTIONS },
+  { key: "powerFactor", label: "Power Factor:" },
+  { key: "cbcp", label: "CBCP:" },
+];
+
+// Column 3: Compliance, pricing, volume
+const COL_3_FIELDS: FieldDef[] = [
+  { key: "thd", label: "THD (%):" },
+  { key: "beamAngle", label: "Beam Angle:" },
+  { key: "optics", label: "Optics:", type: "select", options: OPTICS_OPTIONS },
+  { key: "certifications", label: "Certifications:", type: "select", options: CERTIFICATIONS_OPTIONS },
+  { key: "buyAmerica", label: "Buy America:", type: "select", options: BUY_AMERICA_OPTIONS },
+  { key: "installationTime", label: "Installation (minutes):" },
+  { key: "deliveryDays", label: "Delivery (days):" },
+  { key: "pricePerUnit", label: "Price Per Unit ($):" },
+  { key: "volumeTier1Qty", label: "Vol. Tier 1 (min qty):" },
+  { key: "volumeTier1PPU", label: "Vol. Tier 1 PPU ($):" },
+  { key: "volumeTier2Qty", label: "Vol. Tier 2 (min qty):" },
+  { key: "volumeTier2PPU", label: "Vol. Tier 2 PPU ($):" },
+];
+
 export default function CreateCatalogueItem() {
   const { category } = useParams<{ category: string }>();
   const navigate = useNavigate();
@@ -104,6 +175,33 @@ export default function CreateCatalogueItem() {
     );
   };
 
+  const renderField = (f: FieldDef) => {
+    const value = details[f.key] ?? "";
+    return (
+      <div key={f.key}>
+        <Label className="text-primary font-medium text-xs">{f.label}</Label>
+        {f.type === "select" && f.options ? (
+          <Select value={value || undefined} onValueChange={(v) => update(f.key, v)}>
+            <SelectTrigger className="mt-1 bg-card h-9 text-sm">
+              <SelectValue placeholder="Select..." />
+            </SelectTrigger>
+            <SelectContent className="bg-card z-50">
+              {f.options.map((opt) => (
+                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            value={value}
+            onChange={(e) => update(f.key, e.target.value)}
+            className="mt-1 h-9 text-sm"
+          />
+        )}
+      </div>
+    );
+  };
+
   const headerActions = (
     <Button
       onClick={() => handleSubmit()}
@@ -120,329 +218,109 @@ export default function CreateCatalogueItem() {
       title={`Catalogues / Create ${catalogueName.replace(/s$/, "")}`}
       actions={headerActions}
     >
-      <form onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-6">
-        {/* Top Section: Image + Basic Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Image Upload Placeholder */}
-          <div className="space-y-4">
-            <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center bg-muted/50 h-48">
-              <ImagePlus className="h-12 w-12 text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">No image</p>
+      <form onSubmit={handleSubmit} className="max-w-6xl mx-auto space-y-6">
+        {/* ── Top Section: Image + Basic Info ────────────────── */}
+        <div className="bg-card rounded-lg border border-border p-6">
+          <div className="flex gap-6">
+            {/* Image placeholder */}
+            <div className="shrink-0 flex flex-col items-center gap-2">
+              <div className="w-40 h-36 border-2 border-dashed border-border rounded-lg bg-muted/50 flex items-center justify-center">
+                <ImagePlus className="h-12 w-12 text-muted-foreground" strokeWidth={1} />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-40 text-xs"
+              >
+                <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
+                Upload Photo
+              </Button>
             </div>
-            <Button
-              type="button"
-              className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
-            >
-              <ImagePlus className="h-4 w-4 mr-2" />
-              Upload New Photo
-            </Button>
-          </div>
 
-          {/* Basic Info */}
-          <div className="space-y-4">
-            <div>
-              <Label className="text-primary font-medium">Product Name:</Label>
-              <Input
-                value={productName}
-                onChange={(e) => setProductName(e.target.value)}
-                placeholder="Enter product name"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label className="text-primary font-medium">Product Description:</Label>
-              <Input
-                value={details.description}
-                onChange={(e) => update("description", e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+            {/* Core fields */}
+            <div className="flex-1 space-y-3">
               <div>
-                <Label className="text-primary font-medium">Supplier:</Label>
+                <Label className="text-primary font-medium text-xs">Product Name:</Label>
                 <Input
-                  value={details.supplier}
-                  onChange={(e) => update("supplier", e.target.value)}
-                  className="mt-1"
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  placeholder="Enter product name"
+                  className="mt-1 h-9 text-sm"
                 />
               </div>
               <div>
-                <Label className="text-primary font-medium">Product Type:</Label>
+                <Label className="text-primary font-medium text-xs">Product Description:</Label>
                 <Input
-                  value={details.productType}
-                  onChange={(e) => update("productType", e.target.value)}
-                  className="mt-1"
+                  value={details.description}
+                  onChange={(e) => update("description", e.target.value)}
+                  className="mt-1 h-9 text-sm"
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-primary font-medium">Manufacturer:</Label>
-                <Input
-                  value={details.manufacturer}
-                  onChange={(e) => update("manufacturer", e.target.value)}
-                  className="mt-1"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-primary font-medium text-xs">Supplier:</Label>
+                  <Input value={details.supplier} onChange={(e) => update("supplier", e.target.value)} className="mt-1 h-9 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-primary font-medium text-xs">Product Type:</Label>
+                  <Input value={details.productType} onChange={(e) => update("productType", e.target.value)} className="mt-1 h-9 text-sm" />
+                </div>
               </div>
-              <div>
-                <Label className="text-primary font-medium">Order Code:</Label>
-                <Input
-                  value={details.orderCode}
-                  onChange={(e) => update("orderCode", e.target.value)}
-                  className="mt-1"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-primary font-medium text-xs">Manufacturer:</Label>
+                  <Input value={details.manufacturer} onChange={(e) => update("manufacturer", e.target.value)} className="mt-1 h-9 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-primary font-medium text-xs">Order Code:</Label>
+                  <Input value={details.orderCode} onChange={(e) => update("orderCode", e.target.value)} className="mt-1 h-9 text-sm" />
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="border-t border-border pt-6" />
-
-        {/* Middle Section: 3-column spec fields */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <Label className="text-primary font-medium">Length (inches):</Label>
-            <Input value={details.length} onChange={(e) => update("length", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Wattage:</Label>
-            <Input value={details.wattage} onChange={(e) => update("wattage", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">THD (%):</Label>
-            <Input value={details.thd} onChange={(e) => update("thd", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Width (inches):</Label>
-            <Input value={details.width} onChange={(e) => update("width", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Lumens:</Label>
-            <Input value={details.lumens} onChange={(e) => update("lumens", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Beam Angle:</Label>
-            <Input value={details.beamAngle} onChange={(e) => update("beamAngle", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Diameter (inches):</Label>
-            <Input value={details.diameter} onChange={(e) => update("diameter", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">CCT (K):</Label>
-            <Select value={details.cct} onValueChange={(v) => update("cct", v)}>
-              <SelectTrigger className="mt-1 bg-card">
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent className="bg-card z-50">
-                <SelectItem value="2700">2700K</SelectItem>
-                <SelectItem value="3000">3000K</SelectItem>
-                <SelectItem value="3500">3500K</SelectItem>
-                <SelectItem value="4000">4000K</SelectItem>
-                <SelectItem value="5000">5000K</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Optics:</Label>
-            <Input value={details.optics} onChange={(e) => update("optics", e.target.value)} className="mt-1" />
+        {/* ── Specs Section: 3-column grid ──────────────────── */}
+        <div className="bg-card rounded-lg border border-border p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-3">
+            <div className="space-y-3">
+              {COL_1_FIELDS.map(renderField)}
+            </div>
+            <div className="space-y-3">
+              {COL_2_FIELDS.map(renderField)}
+            </div>
+            <div className="space-y-3">
+              {COL_3_FIELDS.map(renderField)}
+            </div>
           </div>
         </div>
 
-        <div className="border-t border-border pt-6" />
-
-        {/* Additional Specs */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* ── Bottom Section: Full-width fields ─────────────── */}
+        <div className="bg-card rounded-lg border border-border p-6 space-y-4">
           <div>
-            <Label className="text-primary font-medium">Application:</Label>
-            <Select value={details.application} onValueChange={(v) => update("application", v)}>
-              <SelectTrigger className="mt-1 bg-card">
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent className="bg-card z-50">
-                <SelectItem value="indoor">Indoor</SelectItem>
-                <SelectItem value="outdoor">Outdoor</SelectItem>
-                <SelectItem value="both">Both</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label className="text-primary font-medium text-xs">Supplier Product Description:</Label>
+            <Input value={details.supplierDescription} onChange={(e) => update("supplierDescription", e.target.value)} className="mt-1 h-9 text-sm" />
           </div>
           <div>
-            <Label className="text-primary font-medium">L70 Lifetime (hours):</Label>
-            <Input value={details.l70Lifetime} onChange={(e) => update("l70Lifetime", e.target.value)} className="mt-1" />
+            <Label className="text-primary font-medium text-xs">Product Specifications (hyperlink):</Label>
+            <Input value={details.productSpecifications} onChange={(e) => update("productSpecifications", e.target.value)} className="mt-1 h-9 text-sm" />
           </div>
           <div>
-            <Label className="text-primary font-medium">Buy America:</Label>
-            <Select value={details.buyAmerica} onValueChange={(v) => update("buyAmerica", v)}>
-              <SelectTrigger className="mt-1 bg-card">
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent className="bg-card z-50">
-                <SelectItem value="yes">Yes</SelectItem>
-                <SelectItem value="no">No</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label className="text-primary font-medium text-xs">Installation Instructions (hyperlink):</Label>
+            <Input value={details.installationInstructions} onChange={(e) => update("installationInstructions", e.target.value)} className="mt-1 h-9 text-sm" />
           </div>
           <div>
-            <Label className="text-primary font-medium">Style:</Label>
-            <Select value={details.style} onValueChange={(v) => update("style", v)}>
-              <SelectTrigger className="mt-1 bg-card">
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent className="bg-card z-50">
-                <SelectItem value="modern">Modern</SelectItem>
-                <SelectItem value="traditional">Traditional</SelectItem>
-                <SelectItem value="industrial">Industrial</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label className="text-primary font-medium text-xs">Product Image (hyperlink):</Label>
+            <Input value={details.productImage} onChange={(e) => update("productImage", e.target.value)} className="mt-1 h-9 text-sm" />
           </div>
           <div>
-            <Label className="text-primary font-medium">Warranty (years):</Label>
-            <Input value={details.warranty} onChange={(e) => update("warranty", e.target.value)} className="mt-1" />
+            <Label className="text-primary font-medium text-xs">Compatible Product Order Codes:</Label>
+            <Input value={details.compatibleOrderCodes} onChange={(e) => update("compatibleOrderCodes", e.target.value)} className="mt-1 h-9 text-sm" />
           </div>
           <div>
-            <Label className="text-primary font-medium">Installation Time (min):</Label>
-            <Input value={details.installationTime} onChange={(e) => update("installationTime", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Mount:</Label>
-            <Select value={details.mount} onValueChange={(v) => update("mount", v)}>
-              <SelectTrigger className="mt-1 bg-card">
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent className="bg-card z-50">
-                <SelectItem value="surface">Surface</SelectItem>
-                <SelectItem value="recessed">Recessed</SelectItem>
-                <SelectItem value="pendant">Pendant</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Voltage (min):</Label>
-            <Input value={details.voltageMin} onChange={(e) => update("voltageMin", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Delivery (days):</Label>
-            <Input value={details.deliveryDays} onChange={(e) => update("deliveryDays", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Voltage (max):</Label>
-            <Input value={details.voltageMax} onChange={(e) => update("voltageMax", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Dimmability:</Label>
-            <Select value={details.dimmability} onValueChange={(v) => update("dimmability", v)}>
-              <SelectTrigger className="mt-1 bg-card">
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent className="bg-card z-50">
-                <SelectItem value="0-10v">0-10V</SelectItem>
-                <SelectItem value="triac">TRIAC</SelectItem>
-                <SelectItem value="dali">DALI</SelectItem>
-                <SelectItem value="non-dim">Non-Dimmable</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Price Per Unit ($):</Label>
-            <Input value={details.pricePerUnit} onChange={(e) => update("pricePerUnit", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">CRI:</Label>
-            <Input value={details.cri} onChange={(e) => update("cri", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Color Tunable:</Label>
-            <Select value={details.colorTunable} onValueChange={(v) => update("colorTunable", v)}>
-              <SelectTrigger className="mt-1 bg-card">
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent className="bg-card z-50">
-                <SelectItem value="yes">Yes</SelectItem>
-                <SelectItem value="no">No</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Power Factor:</Label>
-            <Input value={details.powerFactor} onChange={(e) => update("powerFactor", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">CBCP:</Label>
-            <Input value={details.cbcp} onChange={(e) => update("cbcp", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Vol Tier 1 Qty:</Label>
-            <Input value={details.volumeTier1Qty} onChange={(e) => update("volumeTier1Qty", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Vol Tier 1 PPU ($):</Label>
-            <Input value={details.volumeTier1PPU} onChange={(e) => update("volumeTier1PPU", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Vol Tier 2 Qty:</Label>
-            <Input value={details.volumeTier2Qty} onChange={(e) => update("volumeTier2Qty", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Vol Tier 2 PPU ($):</Label>
-            <Input value={details.volumeTier2PPU} onChange={(e) => update("volumeTier2PPU", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Certifications:</Label>
-            <Input value={details.certifications} onChange={(e) => update("certifications", e.target.value)} className="mt-1" />
-          </div>
-        </div>
-
-        <div className="border-t border-border pt-6" />
-
-        {/* Bottom Section: Full-width fields */}
-        <div className="space-y-4">
-          <div>
-            <Label className="text-primary font-medium">Supplier Product Description:</Label>
-            <Input
-              value={details.supplierDescription}
-              onChange={(e) => update("supplierDescription", e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Installation Instructions (hyperlink):</Label>
-            <Input
-              value={details.installationInstructions}
-              onChange={(e) => update("installationInstructions", e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Product Specifications (hyperlink):</Label>
-            <Input
-              value={details.productSpecifications}
-              onChange={(e) => update("productSpecifications", e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Product Image (hyperlink):</Label>
-            <Input
-              value={details.productImage}
-              onChange={(e) => update("productImage", e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Compatible Order Codes:</Label>
-            <Input
-              value={details.compatibleOrderCodes}
-              onChange={(e) => update("compatibleOrderCodes", e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-primary font-medium">Notes:</Label>
-            <Textarea
-              value={details.notes}
-              onChange={(e) => update("notes", e.target.value)}
-              className="mt-1 min-h-[100px]"
-            />
+            <Label className="text-primary font-medium text-xs">Notes:</Label>
+            <Textarea value={details.notes} onChange={(e) => update("notes", e.target.value)} className="mt-1 min-h-[80px] text-sm" />
           </div>
         </div>
       </form>

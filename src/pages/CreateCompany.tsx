@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useCreateCompany } from '@/hooks/use-companies';
+import { AuthContext } from '@/contexts/AuthContext';
 import { COMPANY_TYPE_LABELS, COMPANY_SUBTYPES } from '@/lib/roles';
 import type { CompanyType } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -80,6 +81,7 @@ type CompanyFormValues = z.infer<typeof companySchema>;
 export default function CreateCompany() {
   const navigate = useNavigate();
   const createCompany = useCreateCompany();
+  const auth = useContext(AuthContext);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
@@ -159,9 +161,10 @@ export default function CreateCompany() {
         service_areas: values.service_areas.filter((sa) => sa.state || sa.city),
       },
       {
-        onSuccess: (data) => {
-          const id = (data as unknown as { id: number })?.id;
-          if (id) navigate(`/companies/${id}`);
+        onSuccess: (companyId) => {
+          // Refresh the auth profile so the user's associated_to_company_id is updated
+          auth?.refreshProfile();
+          if (companyId) navigate(`/companies/${companyId}`);
           else navigate('/companies');
         },
       },
