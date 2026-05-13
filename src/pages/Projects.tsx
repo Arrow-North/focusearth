@@ -36,6 +36,7 @@ import {
   Lightbulb,
   ExternalLink,
   GripVertical,
+  Star,
 } from 'lucide-react';
 
 const STATUS_OPTIONS = [

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useCreateProduct } from "@/hooks/use-products";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,7 +18,7 @@ import {
 import { Check, ImagePlus } from "lucide-react";
 import type { ProductDetails } from "@/types/database";
 
-const CCT_OPTIONS = ["2700K", "3000K", "3500K", "4000K", "5000K", "OtherK"];
+const CCT_OPTIONS = ["2200K", "2500K", "2700K", "3000K", "3500K", "4000K", "4500K", "5000K", "6500K", "Other"];
 const APPLICATION_OPTIONS = ["Indoor", "Outdoor", "Indoor/Outdoor"];
 const CERTIFICATIONS_OPTIONS = [
   "CE Marketing, DLC Approved, Energy Star",
@@ -215,7 +215,15 @@ export default function CreateCatalogueItem() {
 
   return (
     <DashboardLayout
-      title={`Catalogues / Create ${catalogueName.replace(/s$/, "")}`}
+      title={
+        <span>
+          <Link to="/catalogues" className="hover:underline">Catalogues</Link>
+          <span className="mx-2">/</span>
+          <Link to={`/catalogues/${category}`} className="hover:underline">{catalogueName}</Link>
+          <span className="mx-2">/</span>
+          <span>Create</span>
+        </span>
+      }
       actions={headerActions}
     >
       <form onSubmit={handleSubmit} className="max-w-6xl mx-auto space-y-6">

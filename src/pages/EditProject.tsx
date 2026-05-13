@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -7,6 +7,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -14,6 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Form,
   FormControl,
@@ -25,6 +32,9 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { useProject, useUpdateProject, useProjectFiles } from '@/hooks/use-projects';
 import { useFileUpload } from '@/hooks/use-file-upload';
+import { useCompanies } from '@/hooks/use-companies';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import {
   Check,
   Image as ImageIcon,
@@ -38,6 +48,7 @@ import {
   Upload,
   Search,
   HelpCircle,
+  X,
 } from 'lucide-react';
 
 // ── Schemas ──────────────────────────────────────────────────────────
@@ -91,21 +102,21 @@ type ProjectFormValues = z.infer<typeof projectSchema>;
 
 const PROPERTY_TYPES = ['Commercial', 'Residential', 'Industrial', 'Retail', 'Office', 'Warehouse', 'Other'];
 const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
-const APPLICATIONS = ['Indoor', 'Outdoor', 'Both'];
-const VOLTAGES = ['120V', '208V', '240V', '277V', '347V', '480V'];
-const SURFACES = ['Drywall', 'T-Bar/Grid', 'Concrete', 'Wood', 'Metal', 'Other'];
-const CONTROL_TYPES = ['Wall Switch', 'Dimmer', 'Occupancy Sensor', 'Daylight Sensor', 'Timer', 'BMS', 'Other'];
-const INGRESS_RATINGS = ['IP 20', 'IP 44', 'IP 54', 'IP 65', 'IP 66', 'IP 67', 'IP 68'];
+const APPLICATIONS = ['Indoor', 'Outdoor', 'Garage'];
+const VOLTAGES = ['12V', '24V', '48V', '120V', '220V', '277V', '347V', '480V'];
+const SURFACES = ['Wood', 'Drywall', 'Metal', 'Concrete', 'Stone'];
+const CONTROL_TYPES = ['Wall Switch', 'Timer', 'Photocell', 'Occupancy'];
+const INGRESS_RATINGS = ['IP 54', 'IP 55', 'IP 65', 'IP 66', 'IP 67', 'IP 68'];
 
 const PRIORITY_LABELS = ['Price', 'Time', 'Cost', 'Security', 'Human Centric', 'Other'];
 
 const PRIORITY_COLORS: Record<string, string> = {
-  Price: '#ec4899',
-  Time: '#f97316',
-  Cost: '#84cc16',
-  Security: '#06b6d4',
-  'Human Centric': '#a855f7',
-  Other: '#22c55e',
+  Price: '#EC4899',
+  Time: '#F97316',
+  Cost: '#84CC16',
+  Security: '#06B6D4',
+  'Human Centric': '#A855F7',
+  Other: '#6366F1',
 };
 
 // ── Component ────────────────────────────────────────────────────────
@@ -119,6 +130,8 @@ export default function EditProject() {
   const { data: files } = useProjectFiles(projectId);
   const updateProject = useUpdateProject();
   const { upload, isUploading } = useFileUpload();
+  const { data: companiesData } = useCompanies({ pageSize: 100 });
+  const companies = companiesData?.rows ?? [];
 
   const [activeTab, setActiveTab] = useState<'property' | 'luminaires' | 'uploads'>('property');
   const [priorities, setPriorities] = useState<Record<string, number>>({
@@ -131,6 +144,18 @@ export default function EditProject() {
   });
   const [expandedAreas, setExpandedAreas] = useState<Set<number>>(new Set([0]));
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Project image upload state
+  const [projectImage, setProjectImage] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync Company modal state
+  const [syncCompanyOpen, setSyncCompanyOpen] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+
+  // Light count estimate modal state
+  const [lightCountModalOpen, setLightCountModalOpen] = useState(false);
 
   const form = useForm<ProjectFormValues>({
     resolver: zodResolver(projectSchema),
@@ -225,7 +250,71 @@ export default function EditProject() {
         ...Object.fromEntries(PRIORITY_LABELS.map((l) => [l, pp[l] ?? 0])),
       }));
     }
+
+    // Set project image
+    if (project.image) {
+      setProjectImage(project.image);
+    }
+
+    // Set selected company
+    if (project.company_id) {
+      setSelectedCompanyId(project.company_id);
+    }
   }, [project, form]);
+
+  // Project image upload handler
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    // Validate file type
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowed.includes(file.type)) {
+      toast.error('Only JPEG, PNG, WebP, and GIF images are allowed');
+      return;
+    }
+
+    // Validate file size (10 MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be smaller than 10 MB');
+      return;
+    }
+
+    setIsUploadingImage(true);
+
+    try {
+      // Build a unique path using timestamp
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `projects/${projectId}/${timestamp}_${safeName}`;
+
+      // Upload to Supabase Storage
+      const { error: storageError } = await supabase.storage
+        .from('project-images')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (storageError) {
+        throw new Error(storageError.message);
+      }
+
+      // Get the public URL
+      const { data: urlData } = supabase.storage
+        .from('project-images')
+        .getPublicUrl(storagePath);
+
+      setProjectImage(urlData.publicUrl);
+      toast.success('Image uploaded');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      toast.error(`Image upload failed: ${message}`);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  }, [projectId]);
 
   const onSubmit = async (values: ProjectFormValues) => {
     if (!projectId) return;
@@ -234,7 +323,7 @@ export default function EditProject() {
       projectId,
       fields: {
         title: values.title,
-        company_id: values.company_id,
+        company_id: selectedCompanyId ?? values.company_id,
         property_type: values.property_type || null,
         property_size: values.property_size || null,
         address: values.address || null,
@@ -255,6 +344,7 @@ export default function EditProject() {
         notes: values.notes || null,
         areas: values.areas.length > 0 ? values.areas : null,
         property_priorities: priorities,
+        image: projectImage || null,
       },
     });
 
@@ -327,7 +417,7 @@ export default function EditProject() {
   );
 
   return (
-    <DashboardLayout title="Projects / Edit Project" showSearch={false} actions={headerActions}>
+    <DashboardLayout title={<span><Link to="/projects" className="hover:underline">Projects</Link><span className="mx-2">/</span><span>Edit Project</span></span>} showSearch={false} actions={headerActions}>
       {/* ── Tabs ──────────────────────────────────────────────── */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="flex border-b border-gray-200">
@@ -355,21 +445,41 @@ export default function EditProject() {
                 <div className="flex gap-6">
                   {/* Image */}
                   <div className="shrink-0">
-                    <div className="w-44 h-36 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 mb-2">
-                      {project.image ? (
-                        <img src={project.image} alt="" className="w-full h-full object-cover" />
+                    <div className="w-44 h-36 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 mb-2 flex items-center justify-center">
+                      {isUploadingImage ? (
+                        <div className="animate-spin h-8 w-8 border-2 border-green-600 border-t-transparent rounded-full" />
+                      ) : projectImage ? (
+                        <img src={projectImage} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Lightbulb className="h-12 w-12 text-gray-300" strokeWidth={1} />
-                        </div>
+                        <Lightbulb className="h-12 w-12 text-gray-300" strokeWidth={1} />
                       )}
                     </div>
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                    />
                     <div className="flex gap-2">
-                      <Button type="button" size="sm" variant="outline" className="text-xs bg-green-50 text-green-700 border-green-300">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-xs bg-green-50 text-green-700 border-green-300"
+                        onClick={() => imageInputRef.current?.click()}
+                        disabled={isUploadingImage}
+                      >
                         <ImageIcon className="h-3 w-3 mr-1" />
-                        Upload Photo
+                        {isUploadingImage ? 'Uploading...' : 'Upload Photo'}
                       </Button>
-                      <Button type="button" size="sm" variant="outline" className="text-xs bg-green-50 text-green-700 border-green-300">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-xs bg-orange-50 text-orange-700 border-orange-300"
+                        onClick={() => setSyncCompanyOpen(true)}
+                      >
                         <RefreshCw className="h-3 w-3 mr-1" />
                         Sync Company
                       </Button>
@@ -508,15 +618,21 @@ export default function EditProject() {
                     <FormItem>
                       <FormLabel className="text-green-700 font-semibold text-xs flex items-center gap-1">
                         Light Count:
-                        <HelpCircle className="h-3.5 w-3.5 text-yellow-500" />
+                        <button
+                          type="button"
+                          onClick={() => setLightCountModalOpen(true)}
+                          className="text-yellow-500 hover:text-yellow-600"
+                        >
+                          <HelpCircle className="h-3.5 w-3.5" />
+                        </button>
                       </FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="yes">Yes</SelectItem>
-                          <SelectItem value="no">No</SelectItem>
+                          <SelectItem value="Yes">Yes</SelectItem>
+                          <SelectItem value="No">No</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormItem>
@@ -570,80 +686,93 @@ export default function EditProject() {
                 )} />
 
                 {/* Project Priorities */}
-                <div>
-                  <p className="text-green-700 font-semibold text-xs mb-3">Project Priorities:</p>
-                  <div className="flex gap-6">
-                    {/* Priority controls */}
-                    <div className="flex-1 grid grid-cols-2 gap-3">
-                      {PRIORITY_LABELS.map((label) => (
-                        <div
-                          key={label}
-                          className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2"
-                        >
-                          <div className="w-1 h-8 rounded-full" style={{ backgroundColor: PRIORITY_COLORS[label] }} />
-                          <span className="text-sm font-medium min-w-[100px]">{label}</span>
-                          <button
-                            type="button"
-                            className="w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center"
-                            onClick={() => adjustPriority(label, 5)}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center"
-                            onClick={() => adjustPriority(label, -5)}
-                          >
-                            <Minus className="h-3.5 w-3.5" />
-                          </button>
-                          <span className="text-sm text-gray-600 ml-auto">{priorities[label]}%</span>
+                {(() => {
+                  const totalPriority = Object.values(priorities).reduce((a, b) => a + b, 0);
+                  return (
+                    <div>
+                      <p className="text-green-700 font-semibold text-xs mb-3">Project Priorities:</p>
+                      <div className="flex gap-6">
+                        {/* Priority controls */}
+                        <div className="flex-1 grid grid-cols-2 gap-3">
+                          {PRIORITY_LABELS.map((label) => (
+                            <div
+                              key={label}
+                              className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2"
+                            >
+                              <div className="w-1.5 h-8 rounded-sm" style={{ backgroundColor: PRIORITY_COLORS[label] }} />
+                              <span className="text-sm font-medium min-w-[100px]">{label}</span>
+                              <button
+                                type="button"
+                                disabled={totalPriority >= 100}
+                                className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                                  totalPriority >= 100
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    : 'bg-green-600 text-white hover:bg-green-700'
+                                }`}
+                                onClick={() => adjustPriority(label, 5)}
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={priorities[label] === 0}
+                                className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                                  priorities[label] === 0
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    : 'bg-red-500 text-white hover:bg-red-600'
+                                }`}
+                                onClick={() => adjustPriority(label, -5)}
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                              </button>
+                              <span className="text-sm text-gray-600 ml-auto">{priorities[label]}%</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
 
-                    {/* Pie chart */}
-                    <div className="shrink-0 h-64 w-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={(() => {
-                              const slices = PRIORITY_LABELS
-                                .filter((l) => priorities[l] > 0)
-                                .map((l) => ({ name: l, value: priorities[l], color: PRIORITY_COLORS[l] }));
-                              const total = slices.reduce((s, p) => s + p.value, 0);
-                              const remainder = 100 - total;
-                              if (slices.length === 0) return [{ name: 'Empty', value: 100, color: '#d1d5db' }];
-                              if (remainder > 0) return [...slices, { name: 'Unallocated', value: remainder, color: '#d1d5db' }];
-                              return slices;
-                            })()}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={100}
-                            innerRadius={0}
-                          >
-                            {(() => {
-                              const slices = PRIORITY_LABELS
-                                .filter((l) => priorities[l] > 0)
-                                .map((l) => ({ name: l, value: priorities[l], color: PRIORITY_COLORS[l] }));
-                              const total = slices.reduce((s, p) => s + p.value, 0);
-                              const remainder = 100 - total;
-                              const pieData = slices.length === 0
-                                ? [{ name: 'Empty', value: 100, color: '#d1d5db' }]
-                                : remainder > 0
-                                  ? [...slices, { name: 'Unallocated', value: remainder, color: '#d1d5db' }]
-                                  : slices;
-                              return pieData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
-                              ));
-                            })()}
-                          </Pie>
-                        </PieChart>
-                      </ResponsiveContainer>
+                        {/* Pie chart */}
+                        <div className="shrink-0 h-72 w-72">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={(() => {
+                                  const slices = PRIORITY_LABELS
+                                    .filter((l) => priorities[l] > 0)
+                                    .map((l) => ({ name: l, value: priorities[l], color: PRIORITY_COLORS[l] }));
+                                  const remainder = 100 - totalPriority;
+                                  if (slices.length === 0) return [{ name: 'Empty', value: 100, color: '#d1d5db' }];
+                                  if (remainder > 0) return [...slices, { name: 'Unallocated', value: remainder, color: '#d1d5db' }];
+                                  return slices;
+                                })()}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={115}
+                                innerRadius={0}
+                              >
+                                {(() => {
+                                  const slices = PRIORITY_LABELS
+                                    .filter((l) => priorities[l] > 0)
+                                    .map((l) => ({ name: l, value: priorities[l], color: PRIORITY_COLORS[l] }));
+                                  const remainder = 100 - totalPriority;
+                                  const pieData = slices.length === 0
+                                    ? [{ name: 'Empty', value: 100, color: '#d1d5db' }]
+                                    : remainder > 0
+                                      ? [...slices, { name: 'Unallocated', value: remainder, color: '#d1d5db' }]
+                                      : slices;
+                                  return pieData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                  ));
+                                })()}
+                              </Pie>
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -946,6 +1075,107 @@ export default function EditProject() {
           </form>
         </Form>
       </div>
+
+      {/* Sync Company Dialog */}
+      <Dialog open={syncCompanyOpen} onOpenChange={setSyncCompanyOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-green-700">Sync Company</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">
+              Select a company to associate with this project.
+            </p>
+            <div>
+              <Label className="text-green-700 font-semibold text-sm mb-1.5 block">Company:</Label>
+              <Select
+                value={selectedCompanyId?.toString() ?? ''}
+                onValueChange={(val) => setSelectedCompanyId(Number(val))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map((company) => (
+                    <SelectItem key={company.id} value={company.id.toString()}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setSyncCompanyOpen(false)}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedCompanyId) {
+                    form.setValue('company_id', selectedCompanyId);
+                  }
+                  setSyncCompanyOpen(false);
+                }}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                Sync
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Light Count Estimate Modal */}
+      <Dialog open={lightCountModalOpen} onOpenChange={setLightCountModalOpen}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden [&>button]:hidden">
+          <div className="bg-[#E8D87C] px-6 py-4 flex items-center justify-between">
+            <DialogTitle className="text-lg font-bold text-gray-900">Light Count Estimate</DialogTitle>
+            <button
+              type="button"
+              onClick={() => setLightCountModalOpen(false)}
+              className="text-gray-700 hover:text-gray-900"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="px-6 py-6 space-y-6">
+            <p className="text-center text-gray-700">
+              Focus Earth can conduct a light count of your property for $0.01/sq.ft. The light count cost is waived from all approved projects upon authorization.
+            </p>
+            <div className="text-center">
+              <p className="text-gray-700 mb-3">For your property, the site visit and count estimate is:</p>
+              <div className="border border-gray-300 rounded-md px-4 py-3 inline-block min-w-[120px]">
+                <span className="text-lg font-medium text-gray-900">
+                  {form.watch('property_size') ? (parseFloat(form.watch('property_size')) * 0.01).toFixed(2) : '0'}
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-center gap-4 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLightCountModalOpen(false)}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 border-gray-300 px-6"
+              >
+                Nevermind, Go Back
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  form.setValue('light_count', 'Yes');
+                  setLightCountModalOpen(false);
+                }}
+                className="bg-[#3B4A6B] hover:bg-[#4B5A7B] text-white px-6"
+              >
+                OK, Let's Do it!
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

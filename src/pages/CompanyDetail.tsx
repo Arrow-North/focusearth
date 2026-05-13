@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -205,7 +205,7 @@ export default function CompanyDetail() {
 
   if (isLoading) {
     return (
-      <DashboardLayout title="Companies / ...">
+      <DashboardLayout title={<span><Link to="/companies" className="hover:underline">Companies</Link><span className="mx-2">/</span><span>...</span></span>}>
         <div className="flex items-center justify-center py-24">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
@@ -215,7 +215,7 @@ export default function CompanyDetail() {
 
   if (error || !company) {
     return (
-      <DashboardLayout title="Company Not Found">
+      <DashboardLayout title={<span><Link to="/companies" className="hover:underline">Companies</Link><span className="mx-2">/</span><span>Not Found</span></span>}>
         <div className="text-center py-12">
           <p className="text-muted-foreground">Company not found</p>
           <Button variant="ghost" onClick={() => navigate(-1)} className="mt-4">
@@ -249,7 +249,7 @@ export default function CompanyDetail() {
   ).join(", ");
 
   return (
-    <DashboardLayout title={`Companies / ${company.name}`}>
+    <DashboardLayout title={<span><Link to="/companies" className="hover:underline">Companies</Link><span className="mx-2">/</span><span>{company.name}</span></span>}>
       <div className="space-y-6">
         <Button
           variant="ghost"

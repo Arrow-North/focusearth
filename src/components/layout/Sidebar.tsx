@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, ShoppingCart, BookOpen, Users, Globe, X, LogOut, ChevronDown, Pencil, FolderOpen, BarChart3, Upload } from "lucide-react";
+import { Bell, ShoppingCart, BookOpen, Users, Globe, X, LogOut, ChevronDown, Pencil, FolderOpen, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -17,10 +17,6 @@ const orderSubItems = [
   { to: "/orders/real-estate", label: "Real Estate", color: "bg-status-purple" },
 ];
 
-const catalogueSubItems = [
-  { to: "/catalogues", label: "Browse", color: "bg-status-green", exact: true },
-  { to: "/catalogues/import", label: "Import", color: "bg-status-teal", adminOnly: true },
-];
 
 const colorMap: Record<string, string> = {
   yellow: "bg-status-yellow",
@@ -38,10 +34,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const navigate = useNavigate();
   const { profile, userType, signOut } = useAuth();
   const [ordersOpen, setOrdersOpen] = useState(location.pathname.startsWith("/orders"));
-  const [cataloguesOpen, setCataloguesOpen] = useState(location.pathname.startsWith("/catalogues"));
 
   const isOrdersActive = location.pathname.startsWith("/orders");
-  const isCataloguesActive = location.pathname.startsWith("/catalogues");
   const isAdminUser = isAdmin(userType);
   const showAnalytics = canAccessAnalytics(userType);
 
@@ -63,14 +57,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
     <>
       {isOpen && (
-        <div className="fixed inset-0 bg-foreground/20 z-40 lg:hidden" onClick={onClose} />
+        <div className="fixed inset-0 bg-foreground/20 z-40" onClick={onClose} />
       )}
 
       <aside
         className={cn(
-          "fixed top-0 left-0 h-full w-64 bg-sidebar border-r border-sidebar-border z-50 transition-[transform] duration-300 ease-in-out flex flex-col shrink-0",
-          "lg:sticky lg:top-0 lg:h-screen lg:z-auto",
-          isOpen ? "translate-x-0" : "-translate-x-full lg:-ml-64"
+          "fixed top-0 left-0 h-full w-64 bg-sidebar border-r border-sidebar-border z-50 transition-transform duration-300 ease-in-out flex flex-col shrink-0",
+          isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         {/* Logo */}
@@ -87,7 +80,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <span className="text-primary">RTH</span>
             </span>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="lg:hidden text-foreground hover:bg-muted">
+          <Button variant="ghost" size="icon" onClick={onClose} className="text-foreground hover:bg-muted">
             <X className="h-5 w-5" />
           </Button>
         </div>
@@ -125,66 +118,42 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             Projects
           </NavLink>
 
-          {/* Orders Dropdown */}
-          <Collapsible open={ordersOpen} onOpenChange={setOrdersOpen}>
-            <CollapsibleTrigger asChild>
-              <button
-                className={cn(
-                  "flex items-center justify-between w-full px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                  isOrdersActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <ShoppingCart className="h-5 w-5" />
-                  Orders
-                </div>
-                <ChevronDown className={cn("h-4 w-4 transition-transform", ordersOpen && "rotate-180")} />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pl-8 space-y-1 mt-1">
-              {orderSubItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  onClick={onClose}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
-                      isActive ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"
-                    )
-                  }
+          {/* Orders - Direct link for Su/Reu/Eu, Dropdown for admins */}
+          {userType === 'Su' || userType === 'Reu' || userType === 'Eu' ? (
+            <NavLink
+              to={userType === 'Su' ? '/orders/suppliers' : '/orders/real-estate'}
+              onClick={onClose}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                  isActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                )
+              }
+            >
+              <ShoppingCart className="h-5 w-5" />
+              Orders
+            </NavLink>
+          ) : (
+            <Collapsible open={ordersOpen} onOpenChange={setOrdersOpen}>
+              <CollapsibleTrigger asChild>
+                <button
+                  className={cn(
+                    "flex items-center justify-between w-full px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                    isOrdersActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                  )}
                 >
-                  <div className={cn("w-2 h-2 rounded-full", item.color)} />
-                  {item.label}
-                </NavLink>
-              ))}
-            </CollapsibleContent>
-          </Collapsible>
-
-          {/* Catalogues Dropdown */}
-          <Collapsible open={cataloguesOpen} onOpenChange={setCataloguesOpen}>
-            <CollapsibleTrigger asChild>
-              <button
-                className={cn(
-                  "flex items-center justify-between w-full px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                  isCataloguesActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <BookOpen className="h-5 w-5" />
-                  Catalogues
-                </div>
-                <ChevronDown className={cn("h-4 w-4 transition-transform", cataloguesOpen && "rotate-180")} />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pl-8 space-y-1 mt-1">
-              {catalogueSubItems
-                .filter(item => !item.adminOnly || isAdminUser)
-                .map((item) => (
+                  <div className="flex items-center gap-3">
+                    <ShoppingCart className="h-5 w-5" />
+                    Orders
+                  </div>
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", ordersOpen && "rotate-180")} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pl-8 space-y-1 mt-1">
+                {orderSubItems.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    end={item.exact}
                     onClick={onClose}
                     className={({ isActive }) =>
                       cn(
@@ -193,16 +162,28 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       )
                     }
                   >
-                    {item.label === "Import" ? (
-                      <Upload className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <div className={cn("w-2 h-2 rounded-full", item.color)} />
-                    )}
+                    <div className={cn("w-2 h-2 rounded-full", item.color)} />
                     {item.label}
                   </NavLink>
                 ))}
-            </CollapsibleContent>
-          </Collapsible>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
+          {/* Catalogues */}
+          <NavLink
+            to="/catalogues"
+            onClick={onClose}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                isActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+              )
+            }
+          >
+            <BookOpen className="h-5 w-5" />
+            Catalogues
+          </NavLink>
 
           {/* Users (admin only) */}
           {isAdminUser && (

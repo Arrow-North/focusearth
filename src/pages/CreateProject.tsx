@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback, useRef } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/dialog';
 import { useCreateProject } from '@/hooks/use-projects';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompanies } from '@/hooks/use-companies';
+import { supabase } from '@/lib/supabase';
 import { PROPERTY_TYPES } from '@/lib/constants';
 import {
   CheckCircle,
@@ -35,6 +37,8 @@ import {
   RefreshCw,
   MinusCircle,
   PlusCircle,
+  HelpCircle,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -48,7 +52,7 @@ const US_STATES = [
 
 // ---------- Priority Definitions ----------
 const PRIORITY_NAMES = ['Price', 'Time', 'Cost', 'Security', 'Human Centric', 'Other'] as const;
-const PRIORITY_COLORS = ['#C8D84D', '#F5A623', '#C8D84D', '#5B6FAF', '#C8D84D', '#E8E8E8'];
+const PRIORITY_COLORS = ['#EC4899', '#F97316', '#84CC16', '#06B6D4', '#A855F7', '#6366F1'];
 
 // ---------- Types ----------
 interface LuminaireFixture {
@@ -134,8 +138,17 @@ function createEmptyArea(): AreaData {
 
 export default function CreateProject() {
   const navigate = useNavigate();
-  const { companyId } = useAuth();
+  const { companyId: defaultCompanyId } = useAuth();
   const createProject = useCreateProject();
+  const { data: companiesData } = useCompanies({ pageSize: 100 });
+  const companies = companiesData?.rows ?? [];
+
+  // Sync Company modal state
+  const [syncCompanyOpen, setSyncCompanyOpen] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+
+  // Initialize selectedCompanyId from auth on mount
+  const companyId = selectedCompanyId ?? defaultCompanyId;
 
   // Property tab state
   const [title, setTitle] = useState('');
@@ -158,8 +171,8 @@ export default function CreateProject() {
   const [loanPeriod, setLoanPeriod] = useState('');
   const [notes, setNotes] = useState('');
 
-  // Priorities
-  const [priorities, setPriorities] = useState([10, 20, 30, 10, 15, 5]);
+  // Priorities (default all to 0%)
+  const [priorities, setPriorities] = useState([0, 0, 0, 0, 0, 0]);
 
   // Luminaires tab state
   const [areas, setAreas] = useState<AreaData[]>([]);
@@ -175,17 +188,34 @@ export default function CreateProject() {
   const [dragOver, setDragOver] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
+  // Project image upload state
+  const [projectImage, setProjectImage] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Light count estimate modal state
+  const [lightCountModalOpen, setLightCountModalOpen] = useState(false);
+
   // Priority helpers
+  const totalPriority = priorities.reduce((a, b) => a + b, 0);
+
   const adjustPriority = (index: number, delta: number) => {
     setPriorities(prev => {
+      const currentTotal = prev.reduce((a, b) => a + b, 0);
+      const currentVal = prev[index];
+      const newVal = Math.max(0, Math.min(100, currentVal + delta));
+      const newTotal = currentTotal - currentVal + newVal;
+
+      // Prevent exceeding 100% total
+      if (newTotal > 100) {
+        return prev;
+      }
+
       const next = [...prev];
-      const newVal = Math.max(0, Math.min(100, next[index] + delta));
       next[index] = newVal;
       return next;
     });
   };
-
-  const totalPriority = priorities.reduce((a, b) => a + b, 0);
 
   // Area helpers
   const addArea = () => setAreas(prev => [...prev, createEmptyArea()]);
@@ -233,16 +263,74 @@ export default function CreateProject() {
     }
   }, []);
 
+  // Project image upload handler
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    // Validate file type
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowed.includes(file.type)) {
+      toast.error('Only JPEG, PNG, WebP, and GIF images are allowed');
+      return;
+    }
+
+    // Validate file size (10 MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be smaller than 10 MB');
+      return;
+    }
+
+    setIsUploadingImage(true);
+
+    try {
+      // Build a unique path using timestamp
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `temp/${timestamp}_${safeName}`;
+
+      // Upload to Supabase Storage
+      const { error: storageError } = await supabase.storage
+        .from('project-images')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (storageError) {
+        throw new Error(storageError.message);
+      }
+
+      // Get the public URL
+      const { data: urlData } = supabase.storage
+        .from('project-images')
+        .getPublicUrl(storagePath);
+
+      setProjectImage(urlData.publicUrl);
+      toast.success('Image uploaded');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      toast.error(`Image upload failed: ${message}`);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  }, []);
+
   // Submit
   const handleDone = async () => {
     if (!title.trim()) {
       toast.error('Project title is required');
       return;
     }
+    if (!companyId) {
+      toast.error('You must be associated with a company to create a project');
+      return;
+    }
     try {
       const projectId = await createProject.mutateAsync({
         title,
-        company_id: companyId ?? 0,
+        company_id: companyId,
         address: address || undefined,
         address2: address2 || undefined,
         city: city || undefined,
@@ -258,6 +346,7 @@ export default function CreateProject() {
         loan_period: loanPeriod ? Number(loanPeriod) : undefined,
         deposit_amount: depositAmount ? Number(depositAmount) : undefined,
         be_financing: beFinancing || undefined,
+        image: projectImage || undefined,
         areas: areas.length > 0 ? areas.map(a => ({
           name: a.name,
           ceilingHeight: a.ceilingHeight,
@@ -299,7 +388,7 @@ export default function CreateProject() {
   );
 
   return (
-    <DashboardLayout title="Projects / Create Project" showSearch={false} actions={headerActions}>
+    <DashboardLayout title={<span><Link to="/projects" className="hover:underline">Projects</Link><span className="mx-2">/</span><span>Create Project</span></span>} showSearch={false} actions={headerActions}>
       <Tabs defaultValue="property" className="w-full">
         <TabsList className="bg-transparent border-b border-border rounded-none w-full justify-start gap-0 h-auto p-0">
           <TabsTrigger value="property" className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#5B6FAF] data-[state=active]:text-[#5B6FAF] data-[state=active]:bg-transparent data-[state=active]:shadow-none text-[#5B6FAF] px-6 py-3">
@@ -321,15 +410,39 @@ export default function CreateProject() {
           <div className="flex gap-6">
             {/* Photo placeholder */}
             <div className="flex-shrink-0 space-y-3">
-              <div className="w-48 h-36 border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted/30">
-                <Image className="h-10 w-10 text-muted-foreground/40" />
+              <div className="w-48 h-36 border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted/30 overflow-hidden">
+                {isUploadingImage ? (
+                  <div className="animate-spin h-8 w-8 border-2 border-[#7BA23F] border-t-transparent rounded-full" />
+                ) : projectImage ? (
+                  <img src={projectImage} alt="Project" className="w-full h-full object-cover" />
+                ) : (
+                  <Image className="h-10 w-10 text-muted-foreground/40" />
+                )}
               </div>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
               <div className="flex gap-2">
-                <Button type="button" size="sm" className="bg-[#7BA23F] hover:bg-[#6B9235] text-white text-xs">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-[#7BA23F] hover:bg-[#6B9235] text-white text-xs"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={isUploadingImage}
+                >
                   <Image className="h-3 w-3 mr-1" />
-                  Upload Photo
+                  {isUploadingImage ? 'Uploading...' : 'Upload Photo'}
                 </Button>
-                <Button type="button" size="sm" className="bg-[#F5A623] hover:bg-[#E09620] text-white text-xs">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-[#F5A623] hover:bg-[#E09620] text-white text-xs"
+                  onClick={() => setSyncCompanyOpen(true)}
+                >
                   <RefreshCw className="h-3 w-3 mr-1" />
                   Sync Company
                 </Button>
@@ -414,13 +527,21 @@ export default function CreateProject() {
               <Input value={complianceLink} onChange={e => setComplianceLink(e.target.value)} />
             </div>
             <div>
-              <Label className="text-[#5B6FAF] font-semibold text-sm">Light Count:</Label>
+              <Label className="text-[#5B6FAF] font-semibold text-sm flex items-center gap-1">
+                Light Count:
+                <button
+                  type="button"
+                  onClick={() => setLightCountModalOpen(true)}
+                  className="text-yellow-500 hover:text-yellow-600"
+                >
+                  <HelpCircle className="h-4 w-4" />
+                </button>
+              </Label>
               <Select value={lightCount} onValueChange={setLightCount}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
-                  {['1-50', '51-100', '101-250', '251-500', '500+'].map(v => (
-                    <SelectItem key={v} value={v}>{v}</SelectItem>
-                  ))}
+                  <SelectItem value="Yes">Yes</SelectItem>
+                  <SelectItem value="No">No</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -467,10 +588,20 @@ export default function CreateProject() {
                   <div key={name} className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
                     <div className="w-1.5 h-8 rounded-sm" style={{ backgroundColor: PRIORITY_COLORS[i] }} />
                     <span className="text-sm font-medium flex-1">{name}</span>
-                    <button type="button" onClick={() => adjustPriority(i, 5)} className="text-[#7BA23F] hover:text-[#6B9235]">
+                    <button
+                      type="button"
+                      onClick={() => adjustPriority(i, 5)}
+                      disabled={totalPriority >= 100}
+                      className={`${totalPriority >= 100 ? 'text-gray-300 cursor-not-allowed' : 'text-[#7BA23F] hover:text-[#6B9235]'}`}
+                    >
                       <PlusCircle className="h-5 w-5" />
                     </button>
-                    <button type="button" onClick={() => adjustPriority(i, -5)} className="text-[#D97B3A] hover:text-[#C06B2A]">
+                    <button
+                      type="button"
+                      onClick={() => adjustPriority(i, -5)}
+                      disabled={priorities[i] === 0}
+                      className={`${priorities[i] === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-[#D97B3A] hover:text-[#C06B2A]'}`}
+                    >
                       <MinusCircle className="h-5 w-5" />
                     </button>
                     <span className="text-sm text-muted-foreground w-10 text-right">{priorities[i]}%</span>
@@ -479,23 +610,43 @@ export default function CreateProject() {
               </div>
 
               {/* Pie chart */}
-              <div className="flex-shrink-0">
-                <svg viewBox="0 0 200 200" width="180" height="180">
-                  {(() => {
-                    let cumulative = 0;
-                    return priorities.map((val, i) => {
-                      if (val === 0 || totalPriority === 0) return null;
-                      const pct = val / totalPriority;
-                      const startAngle = cumulative * 360;
-                      cumulative += pct;
-                      const endAngle = cumulative * 360;
-                      const start = polarToCartesian(100, 100, 80, startAngle);
-                      const end = polarToCartesian(100, 100, 80, endAngle);
-                      const largeArc = pct > 0.5 ? 1 : 0;
-                      const d = `M100,100 L${start.x},${start.y} A80,80 0 ${largeArc},1 ${end.x},${end.y} Z`;
-                      return <path key={i} d={d} fill={PRIORITY_COLORS[i]} stroke="white" strokeWidth="1" />;
-                    });
-                  })()}
+              <div className="flex-shrink-0 relative">
+                <svg viewBox="0 0 200 200" width="240" height="240">
+                  {totalPriority === 0 ? (
+                    <circle cx="100" cy="100" r="80" fill="#E5E7EB" />
+                  ) : (
+                    (() => {
+                      const slices: { pct: number; color: string }[] = [];
+                      priorities.forEach((val, i) => {
+                        if (val > 0) {
+                          slices.push({ pct: val / 100, color: PRIORITY_COLORS[i] });
+                        }
+                      });
+                      // Add unallocated portion
+                      if (totalPriority < 100) {
+                        slices.push({ pct: (100 - totalPriority) / 100, color: '#E5E7EB' });
+                      }
+
+                      let cumulative = 0;
+                      return slices.map((slice, i) => {
+                        // For a full circle, draw a circle instead of an arc
+                        if (slice.pct >= 1) {
+                          return <circle key={i} cx="100" cy="100" r="80" fill={slice.color} />;
+                        }
+                        const startAngle = cumulative * 360;
+                        cumulative += slice.pct;
+                        const endAngle = cumulative * 360;
+                        const start = polarToCartesian(100, 100, 80, startAngle);
+                        const end = polarToCartesian(100, 100, 80, endAngle);
+                        const largeArc = slice.pct > 0.5 ? 1 : 0;
+                        const d = `M100,100 L${start.x},${start.y} A80,80 0 ${largeArc},1 ${end.x},${end.y} Z`;
+                        return <path key={i} d={d} fill={slice.color} stroke="white" strokeWidth="1" />;
+                      });
+                    })()
+                  )}
+                  <text x="100" y="105" textAnchor="middle" className="text-lg font-bold fill-gray-700">
+                    {totalPriority}%
+                  </text>
                 </svg>
               </div>
             </div>
@@ -558,7 +709,7 @@ export default function CreateProject() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="bg-white text-foreground hover:bg-gray-100"
+                      className="bg-yellow-200 text-foreground hover:bg-yellow-300"
                       onClick={() => { addLuminaire(realIdx); openLumModal(realIdx, area.luminaires.length); }}
                     >
                       <Lightbulb className="h-4 w-4 mr-1" />
@@ -612,7 +763,7 @@ export default function CreateProject() {
                             <Select value={area.application} onValueChange={v => updateArea(realIdx, { application: v })}>
                               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
-                                {['Indoor', 'Outdoor', 'Both'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                                {['Indoor', 'Outdoor', 'Garage'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
@@ -623,7 +774,7 @@ export default function CreateProject() {
                             <Select value={area.voltage} onValueChange={v => updateArea(realIdx, { voltage: v })}>
                               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
-                                {['120V', '208V', '240V', '277V', '347V', '480V'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                                {['12V', '24V', '48V', '120V', '220V', '277V', '347V', '480V'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
@@ -632,7 +783,7 @@ export default function CreateProject() {
                             <Select value={area.installationSurface} onValueChange={v => updateArea(realIdx, { installationSurface: v })}>
                               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
-                                {['Ceiling', 'Wall', 'Floor', 'Pole', 'Recessed'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                                {['Wood', 'Drywall', 'Metal', 'Concrete', 'Stone'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
@@ -641,7 +792,7 @@ export default function CreateProject() {
                             <Select value={area.controlType} onValueChange={v => updateArea(realIdx, { controlType: v })}>
                               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
-                                {['Switch', 'Dimmer', 'Occupancy Sensor', 'Daylight Sensor', 'Timer'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                                {['Wall Switch', 'Timer', 'Photocell', 'Occupancy'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
@@ -650,7 +801,7 @@ export default function CreateProject() {
                             <Select value={area.ingressProtection} onValueChange={v => updateArea(realIdx, { ingressProtection: v })}>
                               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
-                                {['IP20', 'IP44', 'IP54', 'IP65', 'IP66', 'IP67', 'IP68'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                                {['IP 54', 'IP 55', 'IP 65', 'IP 66', 'IP 67', 'IP 68'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
@@ -744,6 +895,106 @@ export default function CreateProject() {
         luminaire={areas[editingAreaIdx]?.luminaires[editingLumIdx]}
         onChange={(patch) => updateLuminaire(editingAreaIdx, editingLumIdx, patch)}
       />
+
+      {/* ============================================================ */}
+      {/* SYNC COMPANY MODAL */}
+      {/* ============================================================ */}
+      <Dialog open={syncCompanyOpen} onOpenChange={setSyncCompanyOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#5B6FAF]">Sync Company</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">
+              Select a company to associate with this project.
+            </p>
+            <div>
+              <Label className="text-[#5B6FAF] font-semibold text-sm mb-1.5 block">Company:</Label>
+              <Select
+                value={selectedCompanyId?.toString() ?? (defaultCompanyId?.toString() ?? '')}
+                onValueChange={(val) => setSelectedCompanyId(Number(val))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map((company) => (
+                    <SelectItem key={company.id} value={company.id.toString()}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setSyncCompanyOpen(false)}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => setSyncCompanyOpen(false)}
+                className="bg-[#7BA23F] hover:bg-[#6B9235] text-white"
+              >
+                Sync
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================================ */}
+      {/* LIGHT COUNT ESTIMATE MODAL */}
+      {/* ============================================================ */}
+      <Dialog open={lightCountModalOpen} onOpenChange={setLightCountModalOpen}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden [&>button]:hidden">
+          <div className="bg-[#E8D87C] px-6 py-4 flex items-center justify-between">
+            <DialogTitle className="text-lg font-bold text-gray-900">Light Count Estimate</DialogTitle>
+            <button
+              type="button"
+              onClick={() => setLightCountModalOpen(false)}
+              className="text-gray-700 hover:text-gray-900"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="px-6 py-6 space-y-6">
+            <p className="text-center text-gray-700">
+              Focus Earth can conduct a light count of your property for $0.01/sq.ft. The light count cost is waived from all approved projects upon authorization.
+            </p>
+            <div className="text-center">
+              <p className="text-gray-700 mb-3">For your property, the site visit and count estimate is:</p>
+              <div className="border border-gray-300 rounded-md px-4 py-3 inline-block min-w-[120px]">
+                <span className="text-lg font-medium text-gray-900">
+                  {propertySize ? (parseFloat(propertySize) * 0.01).toFixed(2) : '0'}
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-center gap-4 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLightCountModalOpen(false)}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 border-gray-300 px-6"
+              >
+                Nevermind, Go Back
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setLightCount('Yes');
+                  setLightCountModalOpen(false);
+                }}
+                className="bg-[#3B4A6B] hover:bg-[#4B5A7B] text-white px-6"
+              >
+                OK, Let's Do it!
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

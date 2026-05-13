@@ -1,4 +1,4 @@
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -120,7 +120,7 @@ export default function CreateEstimate() {
 
   return (
     <DashboardLayout
-      title={`Create ${isREU ? 'Real Estate' : 'Supplier'} Estimate`}
+      title={<span><span>Orders</span><span className="mx-2">/</span><Link to={basePath} className="hover:underline">{isREU ? 'Real Estate' : 'Supplier'}</Link><span className="mx-2">/</span><span>Create Estimate</span></span>}
       showSearch={false}
     >
       <div className="max-w-3xl mx-auto space-y-6">

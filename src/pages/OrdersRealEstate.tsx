@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { cn } from "@/lib/utils";
 import { useEstimates, useUnarchiveEstimate } from "@/hooks/use-estimates";
@@ -100,7 +100,7 @@ export default function OrdersRealEstate() {
   const totalPages = Math.max(1, Math.ceil((data?.total_count ?? 0) / pageSize));
 
   return (
-    <DashboardLayout title="Orders/Real Estate/Estimates">
+    <DashboardLayout title={<span><span>Orders</span><span className="mx-2">/</span><Link to="/orders/real-estate" className="hover:underline">Real Estate</Link><span className="mx-2">/</span><span>Estimates</span></span>}>
       <div className="space-y-6">
         {/* Tabs */}
         <div className="border-b border-border">

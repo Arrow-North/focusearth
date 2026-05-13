@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +17,7 @@ export default function Orders() {
   const [activeTab, setActiveTab] = useState("Estimates");
 
   return (
-    <DashboardLayout title="Orders/Supplier/Estimates">
+    <DashboardLayout title={<span><span>Orders</span><span className="mx-2">/</span><Link to="/orders/suppliers" className="hover:underline">Supplier</Link><span className="mx-2">/</span><span>Estimates</span></span>}>
       <div className="space-y-6">
         {/* Tabs */}
         <div className="border-b border-border">
