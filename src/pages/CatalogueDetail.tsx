@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +48,13 @@ export default function CatalogueDetail() {
 
   return (
     <DashboardLayout
-      title={`Catalogues / ${catalogueName}`}
+      title={
+        <span>
+          <Link to="/catalogues" className="hover:underline">Catalogues</Link>
+          <span className="mx-2">/</span>
+          <span>{catalogueName}</span>
+        </span>
+      }
       actions={headerActions}
     >
       <div className="space-y-6">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useProduct, useUpdateProduct } from "@/hooks/use-products";
 import { useProductImageUpload } from "@/hooks/use-product-image-upload";
@@ -18,7 +18,7 @@ import {
 import { ArrowLeft, ImagePlus, Pencil, Check, X, Loader2 } from "lucide-react";
 import type { ProductDetails } from "@/types/database";
 
-const CCT_OPTIONS = ["2700K", "3000K", "3500K", "4000K", "5000K", "OtherK"];
+const CCT_OPTIONS = ["2200K", "2500K", "2700K", "3000K", "3500K", "4000K", "4500K", "5000K", "6500K", "Other"];
 const APPLICATION_OPTIONS = ["Indoor", "Outdoor", "Indoor/Outdoor"];
 const CERTIFICATIONS_OPTIONS = [
   "CE Marketing, DLC Approved, Energy Star",
@@ -223,7 +223,15 @@ export default function CatalogueItemDetail() {
 
   return (
     <DashboardLayout
-      title={`Catalogues / ${catalogueName} / Detail`}
+      title={
+        <span>
+          <Link to="/catalogues" className="hover:underline">Catalogues</Link>
+          <span className="mx-2">/</span>
+          <Link to={`/catalogues/${category}`} className="hover:underline">{catalogueName}</Link>
+          <span className="mx-2">/</span>
+          <span>{product?.details?.description || product?.airtable_record || "Detail"}</span>
+        </span>
+      }
       actions={
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-2 h-4 w-4" />

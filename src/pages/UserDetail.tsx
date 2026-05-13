@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -50,7 +50,98 @@ const SUBJECT_INTERESTS = [
   { key: 'property_value', label: 'Property Value', color: '#5ab84d' },
   { key: 'energy', label: 'Energy', color: '#d4c83e' },
   { key: 'technology', label: 'Technology', color: '#4477aa' },
+  { key: 'education', label: 'Education', color: '#8b5cf6' },
+  { key: 'horticulture', label: 'Horticulture', color: '#22c55e' },
 ] as const;
+
+// ─── Subject Interests Pie Chart ─────────────────────────────────────────────
+
+function SubjectPieChart({ values }: { values: Record<string, number> }) {
+  const segments = useMemo(() => {
+    const result: { key: string; label: string; color: string; percentage: number; startAngle: number; endAngle: number }[] = [];
+    let currentAngle = -90; // Start from top
+
+    const total = SUBJECT_INTERESTS.reduce(
+      (sum, subject) => sum + (values[subject.key] ?? 0),
+      0
+    );
+
+    if (total === 0) {
+      return [{ key: 'empty', label: 'Empty', color: '#d1d5db', percentage: 100, startAngle: -90, endAngle: 270 }];
+    }
+
+    SUBJECT_INTERESTS.forEach((subject) => {
+      const pct = values[subject.key] ?? 0;
+      if (pct === 0) return;
+      const angle = (pct / 100) * 360;
+      result.push({
+        key: subject.key,
+        label: subject.label,
+        color: subject.color,
+        percentage: pct,
+        startAngle: currentAngle,
+        endAngle: currentAngle + angle,
+      });
+      currentAngle += angle;
+    });
+
+    // Add unallocated segment if total < 100
+    if (total < 100) {
+      const remaining = 100 - total;
+      const angle = (remaining / 100) * 360;
+      result.push({
+        key: 'unallocated',
+        label: 'Unallocated',
+        color: '#d1d5db',
+        percentage: remaining,
+        startAngle: currentAngle,
+        endAngle: currentAngle + angle,
+      });
+    }
+
+    return result;
+  }, [values]);
+
+  const describeArc = (startAngle: number, endAngle: number, radius: number) => {
+    const start = {
+      x: 50 + radius * Math.cos((Math.PI * startAngle) / 180),
+      y: 50 + radius * Math.sin((Math.PI * startAngle) / 180),
+    };
+    const end = {
+      x: 50 + radius * Math.cos((Math.PI * endAngle) / 180),
+      y: 50 + radius * Math.sin((Math.PI * endAngle) / 180),
+    };
+    const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+
+    return `M 50 50 L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y} Z`;
+  };
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg viewBox="0 0 100 100" className="w-48 h-48">
+        {segments.map((seg) => (
+          <path
+            key={seg.key}
+            d={describeArc(seg.startAngle, seg.endAngle, 45)}
+            fill={seg.color}
+          />
+        ))}
+      </svg>
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        {SUBJECT_INTERESTS.map((subject) => {
+          const pct = values[subject.key] ?? 0;
+          if (pct === 0) return null;
+          return (
+            <div key={subject.key} className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: subject.color }} />
+              <span className="text-muted-foreground truncate">{subject.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ─── LED Lighting Elements ───────────────────────────────────────────────────
 
@@ -110,28 +201,36 @@ function BubbleChart({
   categories: typeof LED_CATEGORIES;
   values: Record<string, number>;
 }) {
-  // Generate deterministic bubble positions using a seed per item
+  // Square pattern positions within each column:
+  // 0: top right, 1: top left, 2: bottom left, 3: bottom right, 4: middle
+  const squarePositions = [
+    { xOff: 0.25, yOff: 0.25 },   // top right
+    { xOff: -0.25, yOff: 0.25 },  // top left
+    { xOff: -0.25, yOff: 0.75 },  // bottom left
+    { xOff: 0.25, yOff: 0.75 },   // bottom right
+    { xOff: 0, yOff: 0.5 },       // middle
+  ];
+
   const bubbles = useMemo(() => {
-    const result: { x: number; y: number; r: number; color: string; catIdx: number }[] = [];
+    const result: { x: number; y: number; r: number; color: string; catIdx: number; itemIdx: number }[] = [];
+    const colWidth = 400 / categories.length;
+
     categories.forEach((cat, catIdx) => {
+      const colCenter = colWidth * catIdx + colWidth / 2;
+
       cat.items.forEach((item, itemIdx) => {
         const pct = values[item.key] ?? 0;
         if (pct === 0) return;
         const r = Math.max(8, (pct / 50) * 50);
-        // Spread items within their category column
-        const colWidth = 100 / categories.length;
-        const xBase = colWidth * catIdx + colWidth / 2;
-        // Deterministic offsets using item index
-        const seed = catIdx * 7 + itemIdx * 13;
-        const xOff = ((seed % 11) - 5) * (colWidth * 0.06);
-        const yBase = 20 + (itemIdx * 60) / cat.items.length;
-        const yOff = ((seed % 7) - 3) * 3;
+        const pos = squarePositions[itemIdx];
+
         result.push({
-          x: xBase + xOff,
-          y: yBase + yOff,
+          x: colCenter + pos.xOff * colWidth * 0.7,
+          y: pos.yOff * 100,
           r,
           color: cat.color,
           catIdx,
+          itemIdx,
         });
       });
     });
@@ -150,20 +249,23 @@ function BubbleChart({
         ))}
       </div>
       <div className="relative w-full bg-muted/30 border border-border rounded-lg" style={{ height: 280 }}>
-        <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-          {bubbles.map((b, i) => {
-            const itemIdxInCat = i % 5;
-            return (
-              <circle
-                key={i}
-                cx={b.x}
-                cy={b.y}
-                r={b.r / 5}
-                fill={b.color}
-                opacity={opacities[itemIdxInCat] ?? 0.5}
-              />
-            );
-          })}
+        <svg width="100%" height="100%" viewBox="0 0 400 100" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <pattern id="grid" width="20" height="10" patternUnits="userSpaceOnUse">
+              <path d="M 20 0 L 0 0 0 10" fill="none" stroke="currentColor" strokeWidth="0.3" opacity="0.3" />
+            </pattern>
+          </defs>
+          <rect width="400" height="100" fill="url(#grid)" className="text-border" />
+          {bubbles.map((b, i) => (
+            <circle
+              key={i}
+              cx={b.x}
+              cy={b.y}
+              r={b.r / 5}
+              fill={b.color}
+              opacity={opacities[b.itemIdx] ?? 0.5}
+            />
+          ))}
         </svg>
       </div>
     </div>
@@ -235,27 +337,30 @@ function LedPercentRow({
 }) {
   return (
     <div className="flex items-center gap-1.5 bg-muted/40 rounded-md px-2 py-2">
-      <span className="text-xs font-semibold text-foreground min-w-[70px] leading-tight">{label}</span>
-      {!readOnly && (
-        <>
-          <button
-            type="button"
-            onClick={onIncrement}
-            className="w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0 transition-colors"
-            style={{ backgroundColor: color }}
-          >
-            <Plus className="h-3 w-3" />
-          </button>
-          <button
-            type="button"
-            onClick={onDecrement}
-            className="w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shrink-0 transition-colors"
-          >
-            <Minus className="h-3 w-3" />
-          </button>
-        </>
-      )}
-      <span className="text-xs text-muted-foreground w-9 text-right shrink-0">{value}%</span>
+      <span className="text-xs font-semibold text-foreground leading-tight flex-1">{label}</span>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {!readOnly && (
+          <>
+            <button
+              type="button"
+              onClick={onIncrement}
+              className="w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0 transition-colors"
+              style={{ backgroundColor: color }}
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={onDecrement}
+              className="w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0 transition-colors"
+              style={{ backgroundColor: color }}
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+          </>
+        )}
+        <span className="text-xs text-muted-foreground w-9 text-right">{value}%</span>
+      </div>
     </div>
   );
 }
@@ -307,16 +412,58 @@ export default function UserDetail() {
 
   const adjustSubject = useCallback((key: string, delta: number) => {
     setSubjectInterests((prev) => {
+      // Calculate current total across all subjects
+      const total = SUBJECT_INTERESTS.reduce(
+        (sum, subject) => sum + (prev[subject.key] ?? 0),
+        0
+      );
+
+      // If incrementing and total is already at 100, don't allow
+      if (delta > 0 && total >= 100) {
+        return prev;
+      }
+
       const cur = prev[key] ?? 0;
       const next = Math.max(0, Math.min(100, cur + delta));
+
+      // Also check that the new total doesn't exceed 100
+      const newTotal = total - cur + next;
+      if (newTotal > 100) {
+        return prev;
+      }
+
       return { ...prev, [key]: next };
     });
   }, []);
 
   const adjustLed = useCallback((key: string, delta: number) => {
     setLedElements((prev) => {
+      // Find which category this key belongs to
+      const category = LED_CATEGORIES.find((cat) =>
+        cat.items.some((item) => item.key === key)
+      );
+      if (!category) return prev;
+
+      // Calculate current total for this category
+      const categoryTotal = category.items.reduce(
+        (sum, item) => sum + (prev[item.key] ?? 0),
+        0
+      );
+
+      // If incrementing and category is already at 100, don't allow
+      if (delta > 0 && categoryTotal >= 100) {
+        return prev;
+      }
+
       const cur = prev[key] ?? 0;
       const next = Math.max(0, Math.min(100, cur + delta));
+
+      // Also check that the new total doesn't exceed 100
+      const newTotal = categoryTotal - cur + next;
+      if (newTotal > 100) {
+        return prev;
+      }
+
       return { ...prev, [key]: next };
     });
   }, []);
@@ -372,6 +519,7 @@ export default function UserDetail() {
     <div className="flex items-center gap-2">
       <Button
         variant="outline"
+        className="bg-gray-200 hover:bg-gray-300 text-gray-700"
         onClick={handleCancel}
         disabled={updateUser.isPending}
       >
@@ -399,7 +547,13 @@ export default function UserDetail() {
 
   return (
     <DashboardLayout
-      title={`Users / ${fullName || 'User Detail'}`}
+      title={
+        <span>
+          <Link to="/users" className="hover:underline">Users</Link>
+          <span className="mx-2">/</span>
+          <span>{fullName || 'User Detail'}</span>
+        </span>
+      }
       actions={headerActions}
     >
       {isLoading && (
@@ -573,18 +727,23 @@ export default function UserDetail() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {SUBJECT_INTERESTS.map((subject) => (
-                  <PercentControl
-                    key={subject.key}
-                    label={subject.label}
-                    value={subjectInterests[subject.key] ?? 0}
-                    color={subject.color}
-                    onIncrement={() => adjustSubject(subject.key, 5)}
-                    onDecrement={() => adjustSubject(subject.key, -5)}
-                    readOnly={!editing}
-                  />
-                ))}
+              <div className="flex flex-col lg:flex-row gap-6">
+                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {SUBJECT_INTERESTS.map((subject) => (
+                    <PercentControl
+                      key={subject.key}
+                      label={subject.label}
+                      value={subjectInterests[subject.key] ?? 0}
+                      color={subject.color}
+                      onIncrement={() => adjustSubject(subject.key, 5)}
+                      onDecrement={() => adjustSubject(subject.key, -5)}
+                      readOnly={!editing}
+                    />
+                  ))}
+                </div>
+                <div className="lg:w-72 flex justify-center">
+                  <SubjectPieChart values={subjectInterests} />
+                </div>
               </div>
             </div>
 

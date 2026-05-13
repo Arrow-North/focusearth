@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 interface HeaderProps {
-  title: string;
+  title: React.ReactNode;
   onMenuClick: () => void;
   showSearch?: boolean;
   actions?: React.ReactNode;

@@ -3,7 +3,7 @@ import { Sidebar } from "./Sidebar";
 import { useSidebar } from "@/contexts/SidebarContext";
 
 interface DashboardLayoutProps {
-  title: string;
+  title: React.ReactNode;
   children: React.ReactNode;
   showSearch?: boolean;
   actions?: React.ReactNode;

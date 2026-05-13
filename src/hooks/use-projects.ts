@@ -70,6 +70,7 @@ export function useCreateProject() {
       deposit_amount?: number;
       areas?: Record<string, unknown>[];
       be_financing?: string;
+      image?: string;
     }) => {
       const { data, error } = await supabase.rpc('fn_create_project', {
         p_title: params.title,
@@ -90,6 +91,7 @@ export function useCreateProject() {
         p_deposit_amount: params.deposit_amount ?? null,
         p_areas: params.areas ? JSON.stringify(params.areas) : null,
         p_be_financing: params.be_financing ?? null,
+        p_image: params.image ?? null,
       });
 
       if (error) throw error;

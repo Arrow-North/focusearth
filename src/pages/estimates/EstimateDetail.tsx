@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -94,7 +94,7 @@ export default function EstimateDetail() {
 
   if (estLoading || pathLoading) {
     return (
-      <DashboardLayout title="Estimate">
+      <DashboardLayout title={<span><span>Orders</span><span className="mx-2">/</span><span>Estimate</span></span>}>
         <div className="space-y-4">
           <div className="h-8 w-48 bg-muted animate-pulse rounded" />
           <div className="h-64 bg-muted animate-pulse rounded-lg" />
@@ -105,7 +105,7 @@ export default function EstimateDetail() {
 
   if (!estimate || !orderPath) {
     return (
-      <DashboardLayout title="Estimate Not Found">
+      <DashboardLayout title={<span><span>Orders</span><span className="mx-2">/</span><span>Estimate Not Found</span></span>}>
         <div className="text-center py-16 text-muted-foreground">
           <p className="text-lg font-medium">Estimate not found</p>
           <Button variant="outline" className="mt-4" onClick={() => navigate(-1)}>
@@ -209,7 +209,7 @@ export default function EstimateDetail() {
 
   return (
     <DashboardLayout
-      title={`${isSU ? 'Supplier' : 'Real Estate'} Estimate #${est.id}`}
+      title={<span><span>Orders</span><span className="mx-2">/</span><Link to={basePath} className="hover:underline">{isSU ? 'Supplier' : 'Real Estate'}</Link><span className="mx-2">/</span><span>Estimate #{est.id}</span></span>}
       actions={headerActions}
     >
       <div className="space-y-6">

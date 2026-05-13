@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -194,7 +194,7 @@ export default function ProjectDetail() {
         : '';
 
   return (
-    <DashboardLayout title={`Projects / ${titleLine}`}>
+    <DashboardLayout title={<span><Link to="/projects" className="hover:underline">Projects</Link><span className="mx-2">/</span><span>{titleLine}</span></span>}>
       {/* ── Header Section ─────────────────────────────────────────── */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex gap-6">

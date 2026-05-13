@@ -1,18 +1,34 @@
 import { useNavigate } from "react-router-dom";
+import { Upload } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { Button } from "@/components/ui/button";
 import { CATALOGUE_CATEGORIES } from "@/lib/catalogues";
 import { useCategoryCounts } from "@/hooks/use-products";
+import { useAuth } from "@/hooks/useAuth";
+import { isAdmin } from "@/lib/roles";
 import { formatDate } from "@/lib/formatters";
 
 export default function Catalogues() {
   const navigate = useNavigate();
+  const { userType } = useAuth();
   const { data: categoryCounts } = useCategoryCounts();
+  const isAdminUser = isAdmin(userType);
 
   const now = new Date();
   const updatedAtStr = formatDate(now.toISOString()) || now.toLocaleString();
 
   return (
-    <DashboardLayout title="Catalogues">
+    <DashboardLayout
+      title="Catalogues"
+      actions={
+        isAdminUser && (
+          <Button onClick={() => navigate("/catalogues/import")} size="sm">
+            <Upload className="h-4 w-4 mr-2" />
+            Import
+          </Button>
+        )
+      }
+    >
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {CATALOGUE_CATEGORIES.map((item) => {
           const n = categoryCounts?.[item.slug] ?? 0;
