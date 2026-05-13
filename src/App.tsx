@@ -43,6 +43,7 @@ import EstimateDetail from "./pages/estimates/EstimateDetail";
 import CreateEstimate from "./pages/estimates/CreateEstimate";
 import Analytics from "./pages/Analytics";
 import LEDCatalogueImport from "./pages/LEDCatalogueImport";
+import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -136,6 +137,15 @@ const App = () => (
               <ProtectedRoute>
                 <RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au']}>
                   <Analytics />
+                </RoleGuard>
+              </ProtectedRoute>
+            } />
+
+            {/* Admin Dashboard (superadmin only) */}
+            <Route path="/admin" element={
+              <ProtectedRoute>
+                <RoleGuard allowedRoles={['SUPERADMIN']}>
+                  <AdminDashboard />
                 </RoleGuard>
               </ProtectedRoute>
             } />
