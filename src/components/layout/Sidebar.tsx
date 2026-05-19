@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, ShoppingCart, BookOpen, Users, Globe, X, LogOut, ChevronDown, Pencil, FolderOpen, BarChart3 } from "lucide-react";
+import { Bell, ShoppingCart, BookOpen, Users, Globe, X, LogOut, ChevronDown, Pencil, FolderOpen, BarChart3, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -258,6 +258,17 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <p className="text-xs text-muted-foreground">{USER_TYPE_LABELS[userType]}</p>
               )}
             </div>
+            {userType === 'SUPERADMIN' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-pink-500 hover:text-pink-600 hover:bg-pink-50 flex-shrink-0"
+                onClick={() => { navigate('/admin'); onClose(); }}
+                title="Admin Dashboard"
+              >
+                <Shield className="h-5 w-5" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
