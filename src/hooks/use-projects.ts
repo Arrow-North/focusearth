@@ -89,7 +89,7 @@ export function useCreateProject() {
         p_operation_days_per_year: params.operation_days_per_year ?? null,
         p_loan_period: params.loan_period ?? null,
         p_deposit_amount: params.deposit_amount ?? null,
-        p_areas: params.areas ? JSON.stringify(params.areas) : null,
+        p_areas: params.areas ?? null,
         p_be_financing: params.be_financing ?? null,
         p_image: params.image ?? null,
       });

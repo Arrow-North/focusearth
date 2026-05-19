@@ -132,6 +132,68 @@ function createEmptyArea(): AreaData {
   };
 }
 
+// Description builders
+
+function buildFixtureSection(f: LuminaireFixture): string {
+  const parts: string[] = [];
+  const dims = [f.dimLength, f.dimWidth, f.dimDepth, f.dimDiameter].filter(Boolean);
+  if (dims.length) parts.push(`${dims.join('x')}`);
+  if (f.mount) parts.push(f.mount);
+  if (f.style) parts.push(f.style);
+  return parts.join(' ');
+}
+
+function buildLampSection(l: LuminaireLamp): string {
+  const parts: string[] = [];
+  if (l.led === 'Yes') parts.push('LED');
+  if (l.category) parts.push(l.category);
+  if (l.type) parts.push(l.type);
+  if (l.baseCategory) parts.push(l.baseCategory);
+  if (l.baseCategoryType) parts.push(l.baseCategoryType);
+  if (l.wattage) parts.push(`${l.wattage}W`);
+  if (l.colorTemp) parts.push(`${l.colorTemp}K`);
+  if (l.lensType) parts.push(l.lensType);
+  if (l.productCode) parts.push(l.productCode);
+  return parts.join(' ');
+}
+
+function buildPowerSupplySection(ps: LuminairePowerSupply): string {
+  const parts: string[] = [];
+  if (ps.type) parts.push(ps.type);
+  if (ps.manufacturer) parts.push(ps.manufacturer);
+  if (ps.model) parts.push(ps.model);
+  if (ps.productCode) parts.push(ps.productCode);
+  return parts.join(' ');
+}
+
+function buildControlSection(c: LuminaireControl): string {
+  const parts: string[] = [];
+  if (c.type) parts.push(c.type);
+  if (c.manufacturer) parts.push(c.manufacturer);
+  if (c.dimming) parts.push(c.dimming);
+  if (c.model) parts.push(c.model);
+  return parts.join(' ');
+}
+
+function buildAccessorySection(a: LuminaireAccessory): string {
+  const parts: string[] = [];
+  if (a.type) parts.push(a.type);
+  if (a.manufacturer) parts.push(a.manufacturer);
+  if (a.color) parts.push(a.color);
+  if (a.productCode) parts.push(a.productCode);
+  return parts.join(' ');
+}
+
+function buildLuminaireDescription(lum: Luminaire): string {
+  return [
+    buildFixtureSection(lum.fixture),
+    buildLampSection(lum.lamp),
+    buildPowerSupplySection(lum.powerSupply),
+    buildControlSection(lum.control),
+    ...lum.accessories.filter(a => a.selected).map(buildAccessorySection).filter(Boolean),
+  ].filter(Boolean).join(' , ');
+}
+
 // ================================================================
 // MAIN COMPONENT
 // ================================================================
@@ -1045,10 +1107,14 @@ function LuminaireModal({
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <Label className="text-[#5B6FAF] font-semibold text-sm">Luminaire Description</Label>
-              <Input
+              <Textarea
                 value={luminaire.luminaireDescription}
-                onChange={e => onChange({ luminaireDescription: e.target.value })}
-                className="bg-muted/30"
+                readOnly
+                onMouseDown={e => e.preventDefault()}
+                rows={1}
+                className="bg-muted/50 cursor-default resize-none overflow-hidden min-h-0"
+                style={{ fieldSizing: 'content' } as never}
+                tabIndex={-1}
               />
             </div>
             <div className="text-right space-y-1">
@@ -1065,11 +1131,33 @@ function LuminaireModal({
           </div>
 
           {/* TAB CONTENT */}
-          {tab === 'fixture' && <FixtureTab fixture={luminaire.fixture} onChange={f => onChange({ fixture: { ...luminaire.fixture, ...f } })} />}
-          {tab === 'lamp' && <LampTab lamp={luminaire.lamp} onChange={l => onChange({ lamp: { ...luminaire.lamp, ...l } })} />}
-          {tab === 'powerSupply' && <PowerSupplyTab ps={luminaire.powerSupply} onChange={p => onChange({ powerSupply: { ...luminaire.powerSupply, ...p } })} />}
-          {tab === 'control' && <ControlTab ctrl={luminaire.control} onChange={c => onChange({ control: { ...luminaire.control, ...c } })} />}
-          {tab === 'accessories' && <AccessoriesTab accessories={luminaire.accessories} onChange={a => onChange({ accessories: a })} />}
+          {tab === 'fixture' && <FixtureTab fixture={luminaire.fixture} onChange={f => {
+            const newFixture = { ...luminaire.fixture, ...f };
+            const description = buildFixtureSection(newFixture);
+            const updated = { ...newFixture, description };
+            onChange({ fixture: updated, luminaireDescription: buildLuminaireDescription({ ...luminaire, fixture: updated }) });
+          }} />}
+          {tab === 'lamp' && <LampTab lamp={luminaire.lamp} onChange={l => {
+            const newLamp = { ...luminaire.lamp, ...l };
+            const description = buildLampSection(newLamp);
+            const updated = { ...newLamp, description };
+            onChange({ lamp: updated, luminaireDescription: buildLuminaireDescription({ ...luminaire, lamp: updated }) });
+          }} />}
+          {tab === 'powerSupply' && <PowerSupplyTab ps={luminaire.powerSupply} onChange={p => {
+            const newPs = { ...luminaire.powerSupply, ...p };
+            const description = buildPowerSupplySection(newPs);
+            const updated = { ...newPs, description };
+            onChange({ powerSupply: updated, luminaireDescription: buildLuminaireDescription({ ...luminaire, powerSupply: updated }) });
+          }} />}
+          {tab === 'control' && <ControlTab ctrl={luminaire.control} onChange={c => {
+            const newCtrl = { ...luminaire.control, ...c };
+            const description = buildControlSection(newCtrl);
+            const updated = { ...newCtrl, description };
+            onChange({ control: updated, luminaireDescription: buildLuminaireDescription({ ...luminaire, control: updated }) });
+          }} />}
+          {tab === 'accessories' && <AccessoriesTab accessories={luminaire.accessories} onChange={a => {
+            onChange({ accessories: a, luminaireDescription: buildLuminaireDescription({ ...luminaire, accessories: a }) });
+          }} />}
         </div>
       </DialogContent>
     </Dialog>
@@ -1103,7 +1191,7 @@ function FixtureTab({ fixture, onChange }: { fixture: LuminaireFixture; onChange
         </div>
         <div>
           <Label className="text-xs">Fixture Description</Label>
-          <Input value={fixture.description} onChange={e => onChange({ description: e.target.value })} className="bg-muted/30" />
+          <Input value={buildFixtureSection(fixture)} readOnly onMouseDown={e => e.preventDefault()} className="bg-muted/50 cursor-default" />
         </div>
       </div>
 
@@ -1162,7 +1250,7 @@ function LampTab({ lamp, onChange }: { lamp: LuminaireLamp; onChange: (p: Partia
         </div>
         <div>
           <Label className="text-xs">Lamp Description</Label>
-          <Input value={lamp.description} onChange={e => onChange({ description: e.target.value })} className="bg-muted/30" />
+          <Input value={buildLampSection(lamp)} readOnly onMouseDown={e => e.preventDefault()} className="bg-muted/50 cursor-default" />
         </div>
       </div>
 
@@ -1239,7 +1327,7 @@ function PowerSupplyTab({ ps, onChange }: { ps: LuminairePowerSupply; onChange: 
         </div>
         <div>
           <Label className="text-xs">Power Supply Description</Label>
-          <Input value={ps.description} onChange={e => onChange({ description: e.target.value })} className="bg-muted/30" />
+          <Input value={buildPowerSupplySection(ps)} readOnly onMouseDown={e => e.preventDefault()} className="bg-muted/50 cursor-default" />
         </div>
       </div>
 
@@ -1290,7 +1378,7 @@ function ControlTab({ ctrl, onChange }: { ctrl: LuminaireControl; onChange: (p: 
         </div>
         <div>
           <Label className="text-xs">Control Description:</Label>
-          <Input value={ctrl.description} onChange={e => onChange({ description: e.target.value })} className="bg-muted/30" />
+          <Input value={buildControlSection(ctrl)} readOnly onMouseDown={e => e.preventDefault()} className="bg-muted/50 cursor-default" />
         </div>
       </div>
 
@@ -1331,15 +1419,20 @@ function ControlTab({ ctrl, onChange }: { ctrl: LuminaireControl; onChange: (p: 
 
 // ---------- Accessories Tab ----------
 function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAccessory[]; onChange: (a: LuminaireAccessory[]) => void }) {
+  const [activeIdx, setActiveIdx] = useState(0);
+
   const updateAccessory = (idx: number, patch: Partial<LuminaireAccessory>) => {
     onChange(accessories.map((a, i) => i === idx ? { ...a, ...patch } : a));
   };
 
   const addAccessory = () => {
+    const newIdx = accessories.length;
     onChange([...accessories, { selected: true, qtyPerFixture: '', description: '', type: '', manufacturer: '', color: '', productCode: '', dimLength: '', dimWidth: '', dimDepth: '', dimDiameter: '', pricePerUnit: '' }]);
+    setActiveIdx(newIdx);
   };
 
-  const current = accessories[0];
+  const safeIdx = Math.min(activeIdx, accessories.length - 1);
+  const current = accessories[safeIdx];
   if (!current) return null;
 
   return (
@@ -1350,24 +1443,26 @@ function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAcces
           <Label className="text-xs">Select</Label>
           <div className="flex gap-1">
             {accessories.map((acc, i) => (
-              <button
-                key={i}
-                type="button"
-                className={`w-8 h-8 rounded text-sm font-medium ${acc.selected ? 'bg-[#3B4A6B] text-white' : 'bg-muted text-muted-foreground'}`}
-                onClick={() => updateAccessory(i, { selected: !acc.selected })}
-              >
-                {String.fromCharCode(65 + i)}
-              </button>
+              <div key={i} className="flex flex-col items-center gap-0.5">
+                <button
+                  type="button"
+                  className={`w-8 h-8 rounded text-sm font-medium ${acc.selected ? 'bg-[#3B4A6B] text-white' : 'bg-muted text-muted-foreground'}`}
+                  onClick={() => setActiveIdx(i)}
+                >
+                  {String.fromCharCode(65 + i)}
+                </button>
+                <span className={`w-1.5 h-1.5 rounded-full ${i === safeIdx ? 'bg-[#3B4A6B]' : 'bg-transparent'}`} />
+              </div>
             ))}
           </div>
         </div>
         <div>
           <Label className="text-xs">QTY/Fixture</Label>
-          <Input value={current.qtyPerFixture} onChange={e => updateAccessory(0, { qtyPerFixture: e.target.value })} className="w-20" />
+          <Input value={current.qtyPerFixture} onChange={e => updateAccessory(safeIdx, { qtyPerFixture: e.target.value })} className="w-20" />
         </div>
         <div className="flex-1">
           <Label className="text-xs">Accessory Description</Label>
-          <Input value={current.description} onChange={e => updateAccessory(0, { description: e.target.value })} className="bg-muted/30" />
+          <Input value={buildAccessorySection(current)} readOnly onMouseDown={e => e.preventDefault()} className="bg-muted/50 cursor-default" />
         </div>
       </div>
       <Button type="button" size="sm" className="bg-[#3B4A6B] hover:bg-[#4B5A7B] text-white" onClick={addAccessory}>
@@ -1379,7 +1474,7 @@ function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAcces
       <div className="grid grid-cols-4 gap-4">
         <div>
           <Label className="text-[#5B6FAF] font-semibold text-xs">Type:</Label>
-          <Select value={current.type} onValueChange={v => updateAccessory(0, { type: v })}>
+          <Select value={current.type} onValueChange={v => updateAccessory(safeIdx, { type: v })}>
             <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="bracket">Bracket</SelectItem>
@@ -1390,40 +1485,40 @@ function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAcces
         </div>
         <div>
           <Label className="text-[#5B6FAF] font-semibold text-xs">Manufacturer:</Label>
-          <Input value={current.manufacturer} onChange={e => updateAccessory(0, { manufacturer: e.target.value })} />
+          <Input value={current.manufacturer} onChange={e => updateAccessory(safeIdx, { manufacturer: e.target.value })} />
         </div>
         <div>
           <Label className="text-[#5B6FAF] font-semibold text-xs">Color:</Label>
-          <Input value={current.color} onChange={e => updateAccessory(0, { color: e.target.value })} />
+          <Input value={current.color} onChange={e => updateAccessory(safeIdx, { color: e.target.value })} />
         </div>
         <div>
           <Label className="text-[#5B6FAF] font-semibold text-xs">Product Code:</Label>
-          <Input value={current.productCode} onChange={e => updateAccessory(0, { productCode: e.target.value })} />
+          <Input value={current.productCode} onChange={e => updateAccessory(safeIdx, { productCode: e.target.value })} />
         </div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
         <div>
           <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Length (in):</Label>
-          <Input value={current.dimLength} onChange={e => updateAccessory(0, { dimLength: e.target.value })} />
+          <Input value={current.dimLength} onChange={e => updateAccessory(safeIdx, { dimLength: e.target.value })} />
         </div>
         <div>
           <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Width (in):</Label>
-          <Input value={current.dimWidth} onChange={e => updateAccessory(0, { dimWidth: e.target.value })} />
+          <Input value={current.dimWidth} onChange={e => updateAccessory(safeIdx, { dimWidth: e.target.value })} />
         </div>
         <div>
           <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Depth (in):</Label>
-          <Input value={current.dimDepth} onChange={e => updateAccessory(0, { dimDepth: e.target.value })} />
+          <Input value={current.dimDepth} onChange={e => updateAccessory(safeIdx, { dimDepth: e.target.value })} />
         </div>
         <div>
           <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Diameter (in):</Label>
-          <Input value={current.dimDiameter} onChange={e => updateAccessory(0, { dimDiameter: e.target.value })} />
+          <Input value={current.dimDiameter} onChange={e => updateAccessory(safeIdx, { dimDiameter: e.target.value })} />
         </div>
       </div>
 
       <div className="w-40">
         <Label className="text-[#5B6FAF] font-semibold text-xs">Price Per Unit ($):</Label>
-        <Input value={current.pricePerUnit} onChange={e => updateAccessory(0, { pricePerUnit: e.target.value })} />
+        <Input value={current.pricePerUnit} onChange={e => updateAccessory(safeIdx, { pricePerUnit: e.target.value })} />
       </div>
     </>
   );
