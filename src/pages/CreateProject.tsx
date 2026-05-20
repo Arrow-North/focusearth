@@ -1431,6 +1431,13 @@ function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAcces
     setActiveIdx(newIdx);
   };
 
+  const removeAccessory = (idx: number) => {
+    if (accessories.length <= 1) return;
+    const next = accessories.filter((_, i) => i !== idx);
+    onChange(next);
+    setActiveIdx(Math.min(activeIdx, next.length - 1));
+  };
+
   const safeIdx = Math.min(activeIdx, accessories.length - 1);
   const current = accessories[safeIdx];
   if (!current) return null;
@@ -1438,33 +1445,48 @@ function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAcces
   return (
     <>
       <SectionHeader title="Accessories Details" />
-      <div className="flex items-end gap-3">
-        <div>
-          <Label className="text-xs">Select</Label>
-          <div className="flex gap-1">
-            {accessories.map((acc, i) => (
-              <div key={i} className="flex flex-col items-center gap-0.5">
-                <button
-                  type="button"
-                  className={`w-8 h-8 rounded text-sm font-medium ${acc.selected ? 'bg-[#3B4A6B] text-white' : 'bg-muted text-muted-foreground'}`}
-                  onClick={() => setActiveIdx(i)}
-                >
-                  {String.fromCharCode(65 + i)}
-                </button>
-                <span className={`w-1.5 h-1.5 rounded-full ${i === safeIdx ? 'bg-[#3B4A6B]' : 'bg-transparent'}`} />
-              </div>
-            ))}
+      <div className="space-y-2">
+        {accessories.map((acc, i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-3 rounded-md border px-3 py-2 cursor-pointer transition-colors ${i === safeIdx ? 'border-[#3B4A6B] bg-[#3B4A6B]/5' : 'border-border bg-background hover:bg-muted/40'}`}
+            onClick={() => setActiveIdx(i)}
+          >
+            <span
+              className={`w-7 h-7 flex items-center justify-center rounded text-xs font-bold shrink-0 ${i === safeIdx ? 'bg-[#3B4A6B] text-white' : 'bg-muted text-muted-foreground'}`}
+            >
+              {String.fromCharCode(65 + i)}
+            </span>
+            <div className="shrink-0" onClick={e => e.stopPropagation()}>
+              <Label className="text-xs block mb-0.5">QTY/Fixture</Label>
+              <Input
+                value={acc.qtyPerFixture}
+                onChange={e => updateAccessory(i, { qtyPerFixture: e.target.value })}
+                className="w-20 h-7 text-xs"
+              />
+            </div>
+            <div className="flex-1" onClick={e => e.stopPropagation()}>
+              <Label className="text-xs block mb-0.5">Accessory Description</Label>
+              <Input
+                value={buildAccessorySection(acc)}
+                readOnly
+                onMouseDown={e => e.preventDefault()}
+                className="bg-muted/50 cursor-default h-7 text-xs"
+              />
+            </div>
+            {accessories.length > 1 && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); removeAccessory(i); }}
+                className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-        </div>
-        <div>
-          <Label className="text-xs">QTY/Fixture</Label>
-          <Input value={current.qtyPerFixture} onChange={e => updateAccessory(safeIdx, { qtyPerFixture: e.target.value })} className="w-20" />
-        </div>
-        <div className="flex-1">
-          <Label className="text-xs">Accessory Description</Label>
-          <Input value={buildAccessorySection(current)} readOnly onMouseDown={e => e.preventDefault()} className="bg-muted/50 cursor-default" />
-        </div>
+        ))}
       </div>
+
       <Button type="button" size="sm" className="bg-[#3B4A6B] hover:bg-[#4B5A7B] text-white" onClick={addAccessory}>
         <Plus className="h-3 w-3 mr-1" />
         New Accessory
