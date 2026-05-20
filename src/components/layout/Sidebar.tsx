@@ -171,6 +171,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
 
           {/* Catalogues */}
+          {userType !== 'Reu' && (
           <NavLink
             to="/catalogues"
             onClick={onClose}
@@ -184,6 +185,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <BookOpen className="h-5 w-5" />
             Catalogues
           </NavLink>
+          )}
 
           {/* Users (admin only) */}
           {isAdminUser && (
@@ -203,6 +205,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
 
           {/* Companies */}
+          {userType !== 'Reu' && (
           <NavLink
             to="/companies"
             onClick={onClose}
@@ -216,6 +219,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <Globe className="h-5 w-5" />
             Companies
           </NavLink>
+          )}
 
           {/* Data (admin only) */}
           {showAnalytics && (
