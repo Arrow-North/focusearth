@@ -1445,8 +1445,6 @@ function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAcces
   return (
     <>
       <SectionHeader title="Accessories Details" />
-
-      {/* One row per accessory */}
       <div className="space-y-2">
         {accessories.map((acc, i) => (
           <div
@@ -1454,14 +1452,11 @@ function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAcces
             className={`flex items-center gap-3 rounded-md border px-3 py-2 cursor-pointer transition-colors ${i === safeIdx ? 'border-[#3B4A6B] bg-[#3B4A6B]/5' : 'border-border bg-background hover:bg-muted/40'}`}
             onClick={() => setActiveIdx(i)}
           >
-            {/* Letter badge */}
             <span
               className={`w-7 h-7 flex items-center justify-center rounded text-xs font-bold shrink-0 ${i === safeIdx ? 'bg-[#3B4A6B] text-white' : 'bg-muted text-muted-foreground'}`}
             >
               {String.fromCharCode(65 + i)}
             </span>
-
-            {/* QTY */}
             <div className="shrink-0" onClick={e => e.stopPropagation()}>
               <Label className="text-xs block mb-0.5">QTY/Fixture</Label>
               <Input
@@ -1470,8 +1465,6 @@ function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAcces
                 className="w-20 h-7 text-xs"
               />
             </div>
-
-            {/* Description */}
             <div className="flex-1" onClick={e => e.stopPropagation()}>
               <Label className="text-xs block mb-0.5">Accessory Description</Label>
               <Input
@@ -1481,8 +1474,6 @@ function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAcces
                 className="bg-muted/50 cursor-default h-7 text-xs"
               />
             </div>
-
-            {/* Remove */}
             {accessories.length > 1 && (
               <button
                 type="button"
