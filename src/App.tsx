@@ -88,7 +88,7 @@ const App = () => (
             <Route path="/orders/create" element={<ProtectedRoute><CreateEstimate /></ProtectedRoute>} />
 
             {/* Catalogues */}
-            <Route path="/catalogues" element={<ProtectedRoute><Catalogues /></ProtectedRoute>} />
+            <Route path="/catalogues" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><Catalogues /></RoleGuard></ProtectedRoute>} />
             <Route path="/catalogues/companies" element={<Navigate to="/companies" replace />} />
             <Route path="/catalogues/import" element={
               <ProtectedRoute>
@@ -97,9 +97,9 @@ const App = () => (
                 </RoleGuard>
               </ProtectedRoute>
             } />
-            <Route path="/catalogues/:category/new" element={<ProtectedRoute><CreateCatalogueItem /></ProtectedRoute>} />
-            <Route path="/catalogues/:category/:itemId" element={<ProtectedRoute><CatalogueItemDetail /></ProtectedRoute>} />
-            <Route path="/catalogues/:category" element={<ProtectedRoute><CatalogueDetail /></ProtectedRoute>} />
+            <Route path="/catalogues/:category/new" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><CreateCatalogueItem /></RoleGuard></ProtectedRoute>} />
+            <Route path="/catalogues/:category/:itemId" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><CatalogueItemDetail /></RoleGuard></ProtectedRoute>} />
+            <Route path="/catalogues/:category" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><CatalogueDetail /></RoleGuard></ProtectedRoute>} />
 
             {/* Users (admin only) */}
             <Route path="/users" element={
@@ -112,9 +112,9 @@ const App = () => (
             <Route path="/users/:id" element={<ProtectedRoute><UserDetail /></ProtectedRoute>} />
 
             {/* Companies */}
-            <Route path="/companies" element={<ProtectedRoute><Companies /></ProtectedRoute>} />
-            <Route path="/companies/create" element={<ProtectedRoute><CreateCompany /></ProtectedRoute>} />
-            <Route path="/companies/:id" element={<ProtectedRoute><CompanyDetail /></ProtectedRoute>} />
+            <Route path="/companies" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><Companies /></RoleGuard></ProtectedRoute>} />
+            <Route path="/companies/create" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><CreateCompany /></RoleGuard></ProtectedRoute>} />
+            <Route path="/companies/:id" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><CompanyDetail /></RoleGuard></ProtectedRoute>} />
 
             {/* Projects */}
             <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
