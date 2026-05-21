@@ -222,7 +222,13 @@ export default function EditProject() {
       deposit_amount: project.deposit_amount ?? undefined,
       loan_period: project.loan_period ?? undefined,
       notes: notesStr,
-      areas: (project.areas ?? []).map((a) => ({
+      areas: ((): typeof project.areas => {
+        const raw = project.areas;
+        if (typeof raw === 'string') {
+          try { return JSON.parse(raw); } catch { return []; }
+        }
+        return raw ?? [];
+      })().map((a) => ({
         name: a.name ?? '',
         ceiling_height: (a as Record<string, unknown>).ceiling_height as string ?? '',
         daily_usage: (a as Record<string, unknown>).daily_usage as string ?? '',
