@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { supabase } from '@/lib/supabase';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useMessages, useSendMessage } from '@/hooks/use-messages';
+import { useContactRecipients } from '@/hooks/use-users';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -26,6 +28,13 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { MessageSquare, PenSquare, Send } from 'lucide-react';
 
 const composeSchema = z.object({
@@ -38,6 +47,7 @@ type ComposeFormValues = z.infer<typeof composeSchema>;
 export default function Contact() {
   const { user } = useAuth();
   const { data: messages, isLoading, error } = useMessages();
+  const { data: recipients, isLoading: recipientsLoading } = useContactRecipients();
   const sendMessage = useSendMessage();
   const [composeOpen, setComposeOpen] = useState(false);
 
@@ -45,6 +55,23 @@ export default function Contact() {
     resolver: zodResolver(composeSchema),
     defaultValues: { receiver_id: '', message: '' },
   });
+
+  // SUPERADMIN first, then Au, each group sorted by name.
+  const sortedRecipients = useMemo(() => {
+    if (!recipients) return [];
+    return [...recipients].sort((a, b) => {
+      if (a.type === 'SUPERADMIN' && b.type !== 'SUPERADMIN') return -1;
+      if (a.type !== 'SUPERADMIN' && b.type === 'SUPERADMIN') return 1;
+      return (a.first_name ?? '').localeCompare(b.first_name ?? '');
+    });
+  }, [recipients]);
+
+  // Auto-select the first recipient once the list loads.
+  useEffect(() => {
+    if (sortedRecipients.length > 0 && !form.getValues('receiver_id')) {
+      form.setValue('receiver_id', sortedRecipients[0].id);
+    }
+  }, [sortedRecipients, form]);
 
   const onSubmit = (values: ComposeFormValues) => {
     sendMessage.mutate(
@@ -81,10 +108,29 @@ export default function Contact() {
                   name="receiver_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Receiver User ID</FormLabel>
-                      <FormControl>
-                        <Input placeholder="User UUID" {...field} />
-                      </FormControl>
+                      <FormLabel>Send To</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={recipientsLoading}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue
+                              placeholder={
+                                recipientsLoading ? 'Loading users...' : 'Select a recipient'
+                              }
+                            />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {sortedRecipients.map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {[u.first_name, u.last_name].filter(Boolean).join(' ')} — {u.email}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
