@@ -12,6 +12,10 @@ import usersIcon from "@/assets/icons/users.svg";
 import usersWhiteIcon from "@/assets/icons/usersWhite.svg";
 import dataIcon from "@/assets/icons/data.svg";
 import dataWhiteIcon from "@/assets/icons/dataWhite.svg";
+import cloudUploadIcon from "@/assets/icons/cloud-upload.svg";
+import cloudUploadWhiteIcon from "@/assets/icons/cloud-uploadWhite.svg";
+import contactIcon from "@/assets/icons/contact.svg";
+import contactWhiteIcon from "@/assets/icons/contactWhite.svg";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Globe, X, LogOut, ChevronDown, Pencil, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -118,6 +122,28 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             )}
           </NavLink>
 
+          {/* Catalogues (Su only - before Projects) */}
+          {userType === 'Su' && (
+            <NavLink
+              to="/catalogues"
+              onClick={onClose}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                  isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <img src={isActive ? catalogueWhiteIcon : catalogueIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                  <img src={catalogueWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                  Catalogues
+                </>
+              )}
+            </NavLink>
+          )}
+
           {/* Projects */}
           <NavLink
             to="/projects"
@@ -205,7 +231,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
 
           {/* Catalogues */}
-          {userType !== 'Reu' && (
+          {userType !== 'Reu' && userType !== 'Su' && (
           <NavLink
             to="/catalogues"
             onClick={onClose}
@@ -249,7 +275,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
 
           {/* Companies */}
-          {userType !== 'Reu' && (
+          {userType !== 'Reu' && userType !== 'Su' && (
           <NavLink
             to="/companies"
             onClick={onClose}
@@ -285,6 +311,47 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 </>
               )}
             </NavLink>
+          )}
+          {/* Upload & Contact (Reu/Su only) */}
+          {(userType === 'Reu' || userType === 'Su') && (
+            <>
+              <NavLink
+                to="/upload"
+                onClick={onClose}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                    isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <img src={isActive ? cloudUploadWhiteIcon : cloudUploadIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                    <img src={cloudUploadWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                    Upload
+                  </>
+                )}
+              </NavLink>
+              <NavLink
+                to="/contact"
+                onClick={onClose}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                    isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <img src={isActive ? contactWhiteIcon : contactIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                    <img src={contactWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                    Contact
+                  </>
+                )}
+              </NavLink>
+            </>
           )}
 
           <div className="my-4 border-t border-sidebar-border" />
