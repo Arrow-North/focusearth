@@ -1,9 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { supabase } from '@/lib/supabase';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useMessages, useSendMessage } from '@/hooks/use-messages';
 import { useContactRecipients } from '@/hooks/use-users';
