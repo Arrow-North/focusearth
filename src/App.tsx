@@ -43,7 +43,9 @@ import EstimateDetail from "./pages/estimates/EstimateDetail";
 import CreateEstimate from "./pages/estimates/CreateEstimate";
 import Analytics from "./pages/Analytics";
 import LEDCatalogueImport from "./pages/LEDCatalogueImport";
-import AdminDashboard from "./pages/AdminDashboard";
+import AdminDashboard from './pages/AdminDashboard';
+import Upload from './pages/Upload';
+import Contact from './pages/Contact';
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -149,6 +151,10 @@ const App = () => (
                 </RoleGuard>
               </ProtectedRoute>
             } />
+
+            {/* Upload & Contact (Reu/Su) */}
+            <Route path="/upload" element={<ProtectedRoute><RoleGuard allowedRoles={['Reu', 'Su']}><Upload /></RoleGuard></ProtectedRoute>} />
+            <Route path="/contact" element={<ProtectedRoute><RoleGuard allowedRoles={['Reu', 'Su']}><Contact /></RoleGuard></ProtectedRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

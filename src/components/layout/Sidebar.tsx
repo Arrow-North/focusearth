@@ -1,6 +1,23 @@
 import { useState } from "react";
+import logoIcon from "@/assets/LogoIconImage.png";
+import notificationIcon from "@/assets/icons/notification.svg";
+import notificationWhiteIcon from "@/assets/icons/notificationWhite.svg";
+import projectsIcon from "@/assets/icons/projects.svg";
+import projectsWhiteIcon from "@/assets/icons/projectsWhite.svg";
+import ordersIcon from "@/assets/icons/orders.svg";
+import ordersWhiteIcon from "@/assets/icons/ordersWhite.svg";
+import catalogueIcon from "@/assets/icons/catalogue.svg";
+import catalogueWhiteIcon from "@/assets/icons/catalogueWhite.svg";
+import usersIcon from "@/assets/icons/users.svg";
+import usersWhiteIcon from "@/assets/icons/usersWhite.svg";
+import dataIcon from "@/assets/icons/data.svg";
+import dataWhiteIcon from "@/assets/icons/dataWhite.svg";
+import cloudUploadIcon from "@/assets/icons/cloud-upload.svg";
+import cloudUploadWhiteIcon from "@/assets/icons/cloud-uploadWhite.svg";
+import contactIcon from "@/assets/icons/contact.svg";
+import contactWhiteIcon from "@/assets/icons/contactWhite.svg";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, ShoppingCart, BookOpen, Users, Globe, X, LogOut, ChevronDown, Pencil, FolderOpen, BarChart3, Shield } from "lucide-react";
+import { Globe, X, LogOut, ChevronDown, Pencil, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -62,31 +79,20 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed top-0 left-0 h-full w-64 bg-sidebar border-r border-sidebar-border z-50 transition-transform duration-300 ease-in-out flex flex-col shrink-0",
+          "fixed top-0 left-0 h-full w-[20rem] bg-sidebar border-r border-sidebar-border z-50 transition-transform duration-300 ease-in-out flex flex-col shrink-0",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         {/* Logo */}
-        <div className="h-14 flex items-center justify-between px-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-1">
-            <span className="text-xl font-bold tracking-tight">
-              <span className="text-primary">F</span>
-              <span className="text-accent">O</span>
-              <span className="text-primary">CUS</span>
-            </span>
-            <span className="text-xl font-bold tracking-tight">
-              <span className="text-primary">E</span>
-              <span className="text-status-yellow">A</span>
-              <span className="text-primary">RTH</span>
-            </span>
-          </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="text-foreground hover:bg-muted">
+        <div className="h-16 flex justify-between px-6 my-8 border-sidebar-border items-start">
+          <img src={logoIcon} alt="Focus Earth" className="h-16 w-auto" />
+          <button onClick={onClose} className="text-foreground">
             <X className="h-5 w-5" />
-          </Button>
+          </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 py-4 overflow-y-auto">
           {/* Recent Activity */}
           <NavLink
             to="/"
@@ -94,14 +100,49 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             onClick={onClose}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                isActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
               )
             }
           >
-            <Bell className="h-5 w-5" />
-            Recent Activity
+            {({ isActive }) => (
+              <>
+                <img
+                  src={isActive ? notificationWhiteIcon : notificationIcon}
+                  alt=""
+                  className="h-5 w-5 group-hover:hidden"
+                />
+                <img
+                  src={notificationWhiteIcon}
+                  alt=""
+                  className="h-5 w-5 hidden group-hover:block"
+                />
+                Recent Activity
+              </>
+            )}
           </NavLink>
+
+          {/* Catalogues (Su only - before Projects) */}
+          {userType === 'Su' && (
+            <NavLink
+              to="/catalogues"
+              onClick={onClose}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                  isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <img src={isActive ? catalogueWhiteIcon : catalogueIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                  <img src={catalogueWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                  Catalogues
+                </>
+              )}
+            </NavLink>
+          )}
 
           {/* Projects */}
           <NavLink
@@ -109,13 +150,26 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             onClick={onClose}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                isActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
               )
             }
           >
-            <FolderOpen className="h-5 w-5" />
-            Projects
+            {({ isActive }) => (
+              <>
+                <img
+                  src={isActive ? projectsWhiteIcon : projectsIcon}
+                  alt=""
+                  className="h-5 w-5 group-hover:hidden"
+                />
+                <img
+                  src={projectsWhiteIcon}
+                  alt=""
+                  className="h-5 w-5 hidden group-hover:block"
+                />
+                Projects
+              </>
+            )}
           </NavLink>
 
           {/* Orders - Direct link for Su/Reu/Eu, Dropdown for admins */}
@@ -125,31 +179,37 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               onClick={onClose}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                  isActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                  "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                  isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
                 )
               }
             >
-              <ShoppingCart className="h-5 w-5" />
-              Orders
+              {({ isActive }) => (
+                <>
+                  <img src={isActive ? ordersWhiteIcon : ordersIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                  <img src={ordersWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                  Orders
+                </>
+              )}
             </NavLink>
           ) : (
             <Collapsible open={ordersOpen} onOpenChange={setOrdersOpen}>
               <CollapsibleTrigger asChild>
                 <button
                   className={cn(
-                    "flex items-center justify-between w-full px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                    isOrdersActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                    "flex items-center justify-between w-full px-10 py-3 text-m font-medium transition-colors group",
+                    isOrdersActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <ShoppingCart className="h-5 w-5" />
+                    <img src={isOrdersActive ? ordersWhiteIcon : ordersIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                    <img src={ordersWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
                     Orders
                   </div>
                   <ChevronDown className={cn("h-4 w-4 transition-transform", ordersOpen && "rotate-180")} />
                 </button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="pl-8 space-y-1 mt-1">
+              <CollapsibleContent className="pl-8 space-y-1 mt-1 mb-2">
                 {orderSubItems.map((item) => (
                   <NavLink
                     key={item.to}
@@ -157,7 +217,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     onClick={onClose}
                     className={({ isActive }) =>
                       cn(
-                        "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+                        "flex items-center gap-2 px-10 py-1 text-m transition-colors",
                         isActive ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"
                       )
                     }
@@ -171,19 +231,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
 
           {/* Catalogues */}
-          {userType !== 'Reu' && (
+          {userType !== 'Reu' && userType !== 'Su' && (
           <NavLink
             to="/catalogues"
             onClick={onClose}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                isActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
               )
             }
           >
-            <BookOpen className="h-5 w-5" />
-            Catalogues
+            {({ isActive }) => (
+              <>
+                <img src={isActive ? catalogueWhiteIcon : catalogueIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                <img src={catalogueWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                Catalogues
+              </>
+            )}
           </NavLink>
           )}
 
@@ -194,25 +259,30 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               onClick={onClose}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                  isActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                  "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                  isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
                 )
               }
             >
-              <Users className="h-5 w-5" />
-              Users
+              {({ isActive }) => (
+                <>
+                  <img src={isActive ? usersWhiteIcon : usersIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                  <img src={usersWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                  Users
+                </>
+              )}
             </NavLink>
           )}
 
           {/* Companies */}
-          {userType !== 'Reu' && (
+          {userType !== 'Reu' && userType !== 'Su' && (
           <NavLink
             to="/companies"
             onClick={onClose}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                isActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors",
+                isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
               )
             }
           >
@@ -228,21 +298,67 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               onClick={onClose}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                  isActive ? "bg-accent text-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                  "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                  isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
                 )
               }
             >
-              <BarChart3 className="h-5 w-5" />
-              Data
+              {({ isActive }) => (
+                <>
+                  <img src={isActive ? dataWhiteIcon : dataIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                  <img src={dataWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                  Data
+                </>
+              )}
             </NavLink>
+          )}
+          {/* Upload & Contact (Reu/Su only) */}
+          {(userType === 'Reu' || userType === 'Su') && (
+            <>
+              <NavLink
+                to="/upload"
+                onClick={onClose}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                    isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <img src={isActive ? cloudUploadWhiteIcon : cloudUploadIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                    <img src={cloudUploadWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                    Upload
+                  </>
+                )}
+              </NavLink>
+              <NavLink
+                to="/contact"
+                onClick={onClose}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                    isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <img src={isActive ? contactWhiteIcon : contactIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                    <img src={contactWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                    Contact
+                  </>
+                )}
+              </NavLink>
+            </>
           )}
 
           <div className="my-4 border-t border-sidebar-border" />
 
           {/* Log Out */}
           <button
-            className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors w-full"
+            className="flex items-center gap-3 px-10 py-3 text-m font-medium text-sidebar-foreground hover:bg-[#2C628D] hover:text-white transition-colors w-full"
             onClick={handleLogout}
           >
             <LogOut className="h-5 w-5" />
@@ -254,13 +370,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="p-4 border-t border-sidebar-border">
           <div className="flex items-center gap-3">
             <div className={cn("w-10 h-10 rounded-full flex items-center justify-center", avatarColor)}>
-              <span className="text-sm font-semibold text-primary-foreground">{initials}</span>
+              <span className="text-m font-semibold text-primary-foreground">{initials}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
-              {userType && (
+              <p className="text-m font-medium text-foreground truncate">{displayName}</p>
+              {/* {userType && (
                 <p className="text-xs text-muted-foreground">{USER_TYPE_LABELS[userType]}</p>
-              )}
+              )} */}
             </div>
             {userType === 'SUPERADMIN' && (
               <Button

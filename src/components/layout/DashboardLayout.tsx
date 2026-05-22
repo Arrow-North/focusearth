@@ -4,12 +4,13 @@ import { useSidebar } from "@/contexts/SidebarContext";
 
 interface DashboardLayoutProps {
   title: React.ReactNode;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   showSearch?: boolean;
   actions?: React.ReactNode;
+  mainClassName?: string;
 }
 
-export function DashboardLayout({ title, children, showSearch = true, actions }: DashboardLayoutProps) {
+export function DashboardLayout({ title, children, showSearch = true, actions, mainClassName }: DashboardLayoutProps) {
   const { isOpen, toggle, close } = useSidebar();
 
   return (
@@ -24,7 +25,7 @@ export function DashboardLayout({ title, children, showSearch = true, actions }:
           actions={actions}
         />
 
-        <main className="flex-1 p-6 overflow-auto max-w-7xl mx-auto w-full">
+        <main className={`flex-1 p-6 overflow-auto max-w-7xl mx-auto w-full ${mainClassName ? ` ${mainClassName}` : ''}`}>
           {children}
         </main>
       </div>
