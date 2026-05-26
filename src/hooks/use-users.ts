@@ -128,6 +128,25 @@ export function useUpdateUser() {
   });
 }
 
+// ─── useContactRecipients ───────────────────────────────────────────────────
+// Fetches users eligible to receive contact messages: SUPERADMIN and Au types.
+
+export function useContactRecipients() {
+  return useQuery({
+    queryKey: ['users', 'contact-recipients'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email, type')
+        .in('type', ['SUPERADMIN', 'Au'])
+        .eq('is_deleted', false)
+        .order('first_name', { ascending: true });
+      if (error) throw error;
+      return data as { id: string; first_name: string | null; last_name: string; email: string; type: string }[];
+    },
+  });
+}
+
 // ─── useDeleteUser ──────────────────────────────────────────────────────────
 
 export function useDeleteUser() {
