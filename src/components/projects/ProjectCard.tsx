@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lightbulb, Star, GripVertical, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,9 @@ interface ProjectCardProps {
 
 export function ProjectCard({ project }: ProjectCardProps) {
   const navigate = useNavigate();
-  const hasImage = !!project.image;
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const hasImage = !!project.image && !imgError;
   const status = project.status ?? 'new';
 
   // Status label formatting
@@ -84,11 +87,19 @@ export function ProjectCard({ project }: ProjectCardProps) {
         </div>
 
         {hasImage ? (
-          <img
-            src={project.image!}
-            alt={project.title ?? ''}
-            className="h-full w-full object-cover"
-          />
+          <>
+            {!imgLoaded && (
+              <div className="absolute inset-0 bg-gray-200 animate-pulse" />
+            )}
+            <img
+              src={project.image!}
+              alt={project.title ?? ''}
+              loading="lazy"
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgError(true)}
+              className={`h-full w-full object-cover transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+            />
+          </>
         ) : (
           <Lightbulb className="h-16 w-16 text-gray-300" strokeWidth={1} />
         )}
