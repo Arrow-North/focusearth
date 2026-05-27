@@ -291,26 +291,35 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </NavLink>
           )}
 
-          {/* Data (admin only) */}
+          {/* Data (admin only, disabled for super admin) */}
           {showAnalytics && (
-            <NavLink
-              to="/analytics"
-              onClick={onClose}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
-                  isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <img src={isActive ? dataWhiteIcon : dataIcon} alt="" className="h-5 w-5 group-hover:hidden" />
-                  <img src={dataWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
-                  Data
-                </>
-              )}
-            </NavLink>
+            userType === 'SUPERADMIN' ? (
+              <div
+                className="flex items-center gap-3 px-10 py-3 text-m font-medium text-muted-foreground/50 cursor-not-allowed"
+              >
+                <img src={dataIcon} alt="" className="h-5 w-5 opacity-50" />
+                Data
+              </div>
+            ) : (
+              <NavLink
+                to="/analytics"
+                onClick={onClose}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 px-10 py-3 text-m font-medium transition-colors group",
+                    isActive ? "bg-[#2C628D] text-white" : "text-sidebar-foreground hover:bg-[#2C628D] hover:text-white"
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <img src={isActive ? dataWhiteIcon : dataIcon} alt="" className="h-5 w-5 group-hover:hidden" />
+                    <img src={dataWhiteIcon} alt="" className="h-5 w-5 hidden group-hover:block" />
+                    Data
+                  </>
+                )}
+              </NavLink>
+            )
           )}
           {/* Upload & Contact (Reu/Su only) */}
           {(userType === 'Reu' || userType === 'Su') && (

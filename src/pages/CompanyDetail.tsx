@@ -13,15 +13,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  ArrowLeft,
   Loader2,
   Upload,
   RefreshCw,
   UserPlus,
   PlusCircle,
   MinusCircle,
-  ExternalLink,
-  Search,
   Trash2,
   CheckCircle,
   Pencil,
@@ -43,11 +40,11 @@ const US_STATES = [
 const PROPERTY_COLORS: Record<string, string> = {
   "Office": "#ec4899",
   "Industrial": "#f97316",
-  "Retail": "#06b6d4",
+  "Retail": "#93c5fd",
   "Multi Family": "#84cc16",
   "Hospitality": "#14b8a6",
-  "Parking": "#f59e0b",
-  "Horticulture": "#eab308",
+  "Parking": "#d97706",
+  "Horticulture": "#facc15",
   "Healthcare": "#3b82f6",
   "Data Center": "#a855f7",
   "Other": "#22c55e",
@@ -74,6 +71,18 @@ interface FormState {
   website: string;
   notes: string;
   property_priorities: PropertyPriority[];
+}
+
+// Reusable display field component to match the screenshot style
+function DisplayField({ label, value, className = "" }: { label: string; value: string; className?: string }) {
+  return (
+    <div className={className}>
+      <Label className="text-[#2C628D] font-semibold text-sm mb-2 block">{label}</Label>
+      <div className="bg-white border border-gray-200 rounded px-4 py-3 text-foreground min-h-[44px]">
+        {value || "—"}
+      </div>
+    </div>
+  );
 }
 
 export default function CompanyDetail() {
@@ -140,13 +149,11 @@ export default function CompanyDetail() {
       const total = updated.reduce((s, p) => s + p.percentage, 0);
 
       if (direction === 1) {
-        // Only allow increase if total won't exceed 100
         const room = 100 - total;
         if (room <= 0) return prev;
         const increment = Math.min(STEP, room);
         updated[index] = { ...updated[index], percentage: current + increment };
       } else {
-        // Decrease, floor at 0
         const decrement = Math.min(STEP, current);
         if (decrement <= 0) return prev;
         updated[index] = { ...updated[index], percentage: current - decrement };
@@ -218,8 +225,7 @@ export default function CompanyDetail() {
       <DashboardLayout title={<span><Link to="/companies" className="hover:underline">Companies</Link><span className="mx-2">/</span><span>Not Found</span></span>}>
         <div className="text-center py-12">
           <p className="text-muted-foreground">Company not found</p>
-          <Button variant="ghost" onClick={() => navigate(-1)} className="mt-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
+          <Button variant="ghost" onClick={() => navigate("/companies")} className="mt-4">
             Go Back
           </Button>
         </div>
@@ -248,305 +254,287 @@ export default function CompanyDetail() {
     [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email
   ).join(", ");
 
+  // Check if company is in review status
+  const isInReview = company.status === "REVIEW";
+
+  // Check if company type is electrician for serviceable areas
+  const isElectricianType = company.type === "EU";
+
   return (
     <DashboardLayout title={<span><Link to="/companies" className="hover:underline">Companies</Link><span className="mx-2">/</span><span>{company.name}</span></span>}>
-      <div className="space-y-6">
-        <Button
-          variant="ghost"
-          onClick={() => navigate(-1)}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-
-        {/* Company Header */}
-        <div className="bg-card rounded-lg border border-border p-6">
-          <div className="flex items-start gap-6">
-            {/* Logo */}
-            <div className="shrink-0">
-              {companyImage.startsWith("http") ? (
-                <div className="w-20 h-20 rounded border border-border overflow-hidden">
-                  <img
-                    src={companyImage}
-                    alt={company.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="w-20 h-20 rounded border border-border bg-muted flex items-center justify-center text-4xl">
-                  {companyImage || company.name?.charAt(0) || "?"}
-                </div>
-              )}
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" />
-            </div>
-
-            {/* Name + Type */}
-            <div className="flex-1 space-y-2">
-              <div className="flex items-center gap-6">
-                {isEditing ? (
-                  <Input
-                    value={form.name}
-                    onChange={(e) => handleChange("name", e.target.value)}
-                    className="text-xl font-semibold bg-card border-border max-w-md"
-                  />
-                ) : (
-                  <h2 className="text-xl font-semibold text-foreground">{company.name}</h2>
-                )}
-                <div className="flex items-center gap-2 shrink-0">
-                  <Label className="text-muted-foreground whitespace-nowrap">Company Type:</Label>
-                  {isEditing ? (
-                    <Select
-                      value={form.type}
-                      onValueChange={(val) => handleChange("type", val)}
-                    >
-                      <SelectTrigger className="w-40 bg-card border-border">
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(ADMIN_COMPANY_TYPES).map(([key, label]) => (
-                          <SelectItem key={key} value={key}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <span className="text-sm font-medium text-foreground">
-                      {ADMIN_COMPANY_TYPES[company.type] ?? company.type}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Action buttons row */}
-              <div className="flex items-center justify-between">
-                {isEditing ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="bg-status-green hover:bg-status-green/90 text-white border-status-green"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload Logo
-                    </Button>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="bg-status-yellow hover:bg-status-yellow/90 text-foreground border-status-yellow"
-                      >
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Sync Company
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="bg-status-green hover:bg-status-green/90 text-white border-status-green"
-                        onClick={() => navigate(`/companies/${company.id}/invite`)}
-                      >
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        Add New User
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="ml-auto">
-                    <Button
-                      onClick={() => setIsEditing(true)}
-                      className="bg-status-orange/20 hover:bg-status-orange/30 text-status-orange border border-status-orange"
-                    >
-                      <Pencil className="h-4 w-4 mr-2" />
-                      Edit Details
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
+      <div className="px-10 pt-8 pb-16">
+        {/* Accept/Decline Buttons for Review Status */}
+        {isInReview && (
+          <div className="flex gap-6 mb-6">
+            <Button
+              className="bg-green-500 hover:bg-green-600 text-white px-6"
+              onClick={() => {
+                // Handle accept logic
+              }}
+            >
+              Accept
+            </Button>
+            <Button
+              variant="outline"
+              className="border-red-400 text-red-500 hover:bg-red-50 px-6"
+              onClick={() => {
+                // Handle decline logic
+              }}
+            >
+              Decline
+            </Button>
           </div>
-        </div>
+        )}
 
-        {/* Address & Details */}
-        <div className="bg-card rounded-lg border border-border p-6 space-y-6">
-          {/* Address row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label className="text-primary font-medium">Address:</Label>
-              {isEditing ? (
-                <Input
-                  value={form.address}
-                  onChange={(e) => handleChange("address", e.target.value)}
-                  className="mt-1 bg-card border-border"
+        {/* Header Section */}
+        <div className="flex items-start justify-between gap-8 mb-0">
+          <div className="flex items-center gap-6">
+            {/* Company Logo */}
+            {companyImage.startsWith("http") ? (
+              <div className="w-[106px] h-[101px] border-2 border-gray-300 overflow-hidden shrink-0">
+                <img
+                  src={companyImage}
+                  alt={company.name}
+                  className="w-full h-full object-cover"
                 />
-              ) : (
-                <p className="mt-1 text-sm text-foreground">{company.address || "—"}</p>
-              )}
-            </div>
-            <div>
-              <Label className="text-primary font-medium">Address Line 2:</Label>
-              {isEditing ? (
-                <Input
-                  value={form.address2}
-                  onChange={(e) => handleChange("address2", e.target.value)}
-                  className="mt-1 bg-card border-border"
-                />
-              ) : (
-                <p className="mt-1 text-sm text-foreground">{company.address2 || "—"}</p>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="w-[106px] h-[101px] border-2 border-gray-300 bg-gray-50 flex items-center justify-center shrink-0">
+                {companyImage && <span className="text-4xl">{companyImage}</span>}
+              </div>
+            )}
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" />
+
+            {/* Company Name in bordered box */}
+            {isEditing ? (
+              <Input
+                value={form.name}
+                onChange={(e) => handleChange("name", e.target.value)}
+                className="text-2xl font-semibold bg-white border-gray-200 h-[60px] min-w-[450px]"
+              />
+            ) : (
+              <div className="bg-white border border-gray-200 rounded px-6 py-4 min-w-[450px]">
+                <span className="text-2xl font-semibold text-foreground">{company.name}</span>
+              </div>
+            )}
           </div>
 
-          {/* City / State / Zip / Country */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <Label className="text-primary font-medium">City:</Label>
-              {isEditing ? (
-                <Input
-                  value={form.city}
-                  onChange={(e) => handleChange("city", e.target.value)}
-                  className="mt-1 bg-card border-border"
-                />
-              ) : (
-                <p className="mt-1 text-sm text-foreground">{company.city || "—"}</p>
-              )}
-            </div>
-            <div>
-              <Label className="text-primary font-medium">State:</Label>
+          {/* Company Type + Edit Button */}
+          <div className="flex flex-col items-end gap-3">
+            <div className="flex items-center gap-4">
+              <span className="text-lg text-muted-foreground">Company Type:</span>
               {isEditing ? (
                 <Select
-                  value={form.state}
-                  onValueChange={(val) => handleChange("state", val)}
+                  value={form.type}
+                  onValueChange={(val) => handleChange("type", val)}
                 >
-                  <SelectTrigger className="mt-1 bg-card border-border">
-                    <SelectValue placeholder="Select" />
+                  <SelectTrigger className="w-[200px] bg-white border-gray-200 h-[50px]">
+                    <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {US_STATES.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    {Object.entries(ADMIN_COMPANY_TYPES).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
-                <p className="mt-1 text-sm text-foreground">{company.state || "—"}</p>
+                <div className="bg-white border border-gray-200 rounded px-6 py-3 min-w-[200px]">
+                  <span className="text-foreground">{ADMIN_COMPANY_TYPES[company.type] ?? company.type}</span>
+                </div>
               )}
             </div>
-            <div>
-              <Label className="text-primary font-medium">Zip Code:</Label>
-              {isEditing ? (
-                <Input
-                  value={form.zip_code}
-                  onChange={(e) => handleChange("zip_code", e.target.value)}
-                  className="mt-1 bg-card border-border"
-                />
-              ) : (
-                <p className="mt-1 text-sm text-foreground">{company.zip_code || "—"}</p>
-              )}
-            </div>
-            <div>
-              <Label className="text-primary font-medium">Country:</Label>
-              {isEditing ? (
-                <Input
-                  value={form.country}
-                  onChange={(e) => handleChange("country", e.target.value)}
-                  className="mt-1 bg-card border-border"
-                />
-              ) : (
-                <p className="mt-1 text-sm text-foreground">{company.country || "—"}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Associated Users + Website */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label className="text-primary font-medium">Associated Users:</Label>
-              <div className="relative mt-1">
-                <Input
-                  value={associatedUserNames || "No associated users"}
-                  readOnly
-                  className="bg-card border-border pr-10"
-                />
-                {associatedUsers.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 bg-[#C8D84D] hover:bg-[#b8c844] rounded"
-                    onClick={() => navigate(`/users/${associatedUsers[0]?.id}`)}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Button>
-                )}
+            {!isEditing && (
+              <Button
+                onClick={() => setIsEditing(true)}
+                className="bg-[#E8A99C] hover:bg-[#dea090] text-foreground"
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit Details
+              </Button>
+            )}
+            {isEditing && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-status-green hover:bg-status-green/90 text-white border-status-green"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Logo
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-status-yellow hover:bg-status-yellow/90 text-foreground border-status-yellow"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Sync Company
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-status-green hover:bg-status-green/90 text-white border-status-green"
+                  onClick={() => navigate(`/companies/${company.id}/invite`)}
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Add New User
+                </Button>
               </div>
-            </div>
-            <div>
-              <Label className="text-primary font-medium">Website:</Label>
-              {isEditing ? (
-                <Input
-                  value={form.website}
-                  onChange={(e) => handleChange("website", e.target.value)}
-                  className="mt-1 bg-card border-border"
-                />
-              ) : (
-                <p className="mt-1 text-sm text-foreground">{company.website || "—"}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <Label className="text-primary font-medium">Notes:</Label>
-            {isEditing ? (
-              <Textarea
-                value={form.notes}
-                onChange={(e) => handleChange("notes", e.target.value)}
-                className="mt-1 bg-card border-border min-h-[100px]"
-              />
-            ) : (
-              <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{company.notes || "—"}</p>
             )}
           </div>
         </div>
 
         {/* Divider */}
-        <hr className="border-border" />
+        <hr className="border-gray-200 my-8" />
 
-        {/* Property Types Section */}
-        <div className="bg-card rounded-lg border border-border p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-semibold text-foreground">
-              Serviceable Property Types:
-            </h3>
-            {isEditing && (
-              <span
-                className={`text-sm font-medium ${
-                  totalPercentage === 100
-                    ? "text-green-600"
-                    : "text-destructive"
-                }`}
-              >
-                Total: {totalPercentage}%
-              </span>
+        {/* Details Section */}
+        <div className="space-y-6">
+          {/* Address Row */}
+          <div className="grid grid-cols-2 gap-8">
+            {isEditing ? (
+              <>
+                <div>
+                  <Label className="text-[#2C628D] font-semibold text-sm mb-2 block">Address:</Label>
+                  <Input
+                    value={form.address}
+                    onChange={(e) => handleChange("address", e.target.value)}
+                    className="bg-white border-gray-200"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[#2C628D] font-semibold text-sm mb-2 block">Address Line 2:</Label>
+                  <Input
+                    value={form.address2}
+                    onChange={(e) => handleChange("address2", e.target.value)}
+                    className="bg-white border-gray-200"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <DisplayField label="Address:" value={company.address || ""} />
+                <DisplayField label="Address Line 2:" value={company.address2 || ""} />
+              </>
             )}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-8">
-            {/* Property Type Cards */}
-            <div className="grid grid-cols-2 gap-3">
+          {/* City / State / Zip Code / Country Row */}
+          <div className="grid grid-cols-4 gap-6">
+            {isEditing ? (
+              <>
+                <div>
+                  <Label className="text-[#2C628D] font-semibold text-sm mb-2 block">City:</Label>
+                  <Input
+                    value={form.city}
+                    onChange={(e) => handleChange("city", e.target.value)}
+                    className="bg-white border-gray-200"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[#2C628D] font-semibold text-sm mb-2 block">State:</Label>
+                  <Select
+                    value={form.state}
+                    onValueChange={(val) => handleChange("state", val)}
+                  >
+                    <SelectTrigger className="bg-white border-gray-200">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {US_STATES.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[#2C628D] font-semibold text-sm mb-2 block">Zip Code:</Label>
+                  <Input
+                    value={form.zip_code}
+                    onChange={(e) => handleChange("zip_code", e.target.value)}
+                    className="bg-white border-gray-200"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[#2C628D] font-semibold text-sm mb-2 block">Country:</Label>
+                  <Input
+                    value={form.country}
+                    onChange={(e) => handleChange("country", e.target.value)}
+                    className="bg-white border-gray-200"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <DisplayField label="City:" value={company.city || ""} />
+                <DisplayField label="State:" value={company.state || ""} />
+                <DisplayField label="Zip Code:" value={company.zip_code || ""} />
+                <DisplayField label="Country:" value={company.country || ""} />
+              </>
+            )}
+          </div>
+
+          {/* Associated Users / Website Row */}
+          <div className="grid grid-cols-2 gap-8">
+            <DisplayField
+              label="Associated Users:"
+              value={associatedUserNames || "No associated users"}
+            />
+            {isEditing ? (
+              <div>
+                <Label className="text-[#2C628D] font-semibold text-sm mb-2 block">Website:</Label>
+                <Input
+                  value={form.website}
+                  onChange={(e) => handleChange("website", e.target.value)}
+                  className="bg-white border-gray-200"
+                />
+              </div>
+            ) : (
+              <DisplayField label="Website:" value={company.website || ""} />
+            )}
+          </div>
+
+          {/* Notes - Full Width */}
+          <div>
+            <Label className="text-[#2C628D] font-semibold text-sm mb-2 block">Notes:</Label>
+            {isEditing ? (
+              <Textarea
+                value={form.notes}
+                onChange={(e) => handleChange("notes", e.target.value)}
+                className="bg-white border-gray-200 min-h-[120px]"
+              />
+            ) : (
+              <Textarea
+                value={company.notes || ""}
+                readOnly
+                className="bg-white border-gray-200 min-h-[120px] resize-none"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Divider */}
+        <hr className="border-gray-200 my-10" />
+
+        {/* Serviceable Property Types Section */}
+        <div>
+          <h3 className="font-semibold text-lg text-foreground mb-6">
+            Serviceable Property Types:
+          </h3>
+
+          <div className="flex gap-8">
+            {/* Property Type Cards - 2 columns */}
+            <div className="flex-1 grid grid-cols-2 gap-3">
               {allProperties.map((property, index) => (
                 <div
                   key={property.name}
-                  className="bg-card rounded-lg border border-border p-3 flex items-center gap-2"
+                  className="bg-white rounded shadow-sm border-l-4 flex items-center justify-between px-4 py-3"
+                  style={{ borderLeftColor: property.color }}
                 >
-                  <div
-                    className="w-1 h-8 rounded-full shrink-0"
-                    style={{ backgroundColor: property.color }}
-                  />
-                  <span className="text-sm font-medium flex-1 truncate">
-                    {property.name}
-                  </span>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-sm font-medium text-foreground">{property.name}</span>
+                  <div className="flex items-center gap-2">
                     {isEditing && (
                       <>
                         <button
@@ -554,18 +542,18 @@ export default function CompanyDetail() {
                           onClick={() => handlePriorityChange(index, 1)}
                           className="text-[#5B6FAF] hover:text-[#4a5d99] transition-colors"
                         >
-                          <PlusCircle className="h-6 w-6" />
+                          <PlusCircle className="h-5 w-5" />
                         </button>
                         <button
                           type="button"
                           onClick={() => handlePriorityChange(index, -1)}
                           className="text-[#5B6FAF] hover:text-[#4a5d99] transition-colors"
                         >
-                          <MinusCircle className="h-6 w-6" />
+                          <MinusCircle className="h-5 w-5" />
                         </button>
                       </>
                     )}
-                    <span className="text-sm text-muted-foreground w-10 text-right">
+                    <span className="text-sm text-muted-foreground min-w-[40px] text-right">
                       {property.percentage}%
                     </span>
                   </div>
@@ -574,7 +562,7 @@ export default function CompanyDetail() {
             </div>
 
             {/* Pie Chart */}
-            <div className="h-64 w-64">
+            <div className="h-[300px] w-[300px] shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -583,7 +571,7 @@ export default function CompanyDetail() {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    outerRadius={100}
+                    outerRadius={130}
                     innerRadius={0}
                   >
                     {pieData.map((entry, index) => (
@@ -597,34 +585,43 @@ export default function CompanyDetail() {
         </div>
 
         {/* Divider */}
-        <hr className="border-border" />
+        <hr className="border-gray-200 my-10" />
+
+        {/* Serviceable Areas Section (for Electrician types) */}
+        {isElectricianType && (
+          <>
+            <div className="mb-8">
+              <h3 className="font-semibold text-lg text-foreground mb-4">
+                Serviceable Areas:
+              </h3>
+              <p className="text-sm font-semibold text-[#2C628D] mb-2">
+                Serviceable Areas - States &amp; Counties
+              </p>
+              <div className="border border-gray-300 rounded p-3">
+                <p className="text-foreground">—</p>
+              </div>
+            </div>
+            <hr className="border-gray-200 my-10" />
+          </>
+        )}
 
         {/* Uploaded Files Section */}
-        <div className="bg-card rounded-lg border border-border p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="grid grid-cols-2 flex-1 gap-4 text-sm font-medium text-muted-foreground">
-              <span>Uploaded Files</span>
-              <span>Date</span>
-            </div>
-            {isEditing && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="bg-[#5B6FAF] hover:bg-[#4a5d99] text-white border-[#5B6FAF]"
-              >
-                <Search className="h-4 w-4 mr-2" />
-                Browse Files
-              </Button>
-            )}
+        <div>
+          <div className="grid grid-cols-[40%_20%_40%] mb-4">
+            <h3 className="font-semibold text-lg text-foreground">Uploaded Files</h3>
+            <h3 className="font-semibold text-lg text-foreground">Date</h3>
+            <div></div>
           </div>
-          <div className="py-8 text-center text-muted-foreground border-t border-border">
+
+          {/* File list - placeholder */}
+          <div className="py-4 text-muted-foreground">
             No files uploaded yet
           </div>
         </div>
 
         {/* Bottom Action Buttons — only in edit mode */}
         {isEditing && (
-          <div className="flex items-center justify-end gap-3 pb-6">
+          <div className="flex items-center justify-end gap-3 pt-8">
             <Button
               variant="outline"
               className="bg-red-500 hover:bg-red-600 text-white border-red-500"

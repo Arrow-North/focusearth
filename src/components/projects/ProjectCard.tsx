@@ -1,11 +1,24 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lightbulb, Star, GripVertical, ExternalLink } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Lightbulb, Star, ExternalLink } from 'lucide-react';
 import type { Project } from '@/types/database';
 
 interface ProjectCardProps {
   project: Project;
+}
+
+// Drag handle icon (6 dots pattern)
+function DragHandle() {
+  return (
+    <svg width="12" height="18" viewBox="0 0 12 18" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+      <ellipse cx="2.12" cy="2" rx="2.12" ry="2" fill="#5F5F5F" />
+      <ellipse cx="9.36" cy="2" rx="2.12" ry="2" fill="#5F5F5F" />
+      <ellipse cx="2.12" cy="9" rx="2.12" ry="2" fill="#5F5F5F" />
+      <ellipse cx="9.36" cy="9" rx="2.12" ry="2" fill="#5F5F5F" />
+      <ellipse cx="2.12" cy="16" rx="2.12" ry="2" fill="#5F5F5F" />
+      <ellipse cx="9.36" cy="16" rx="2.12" ry="2" fill="#5F5F5F" />
+    </svg>
+  );
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {
@@ -14,76 +27,74 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const [imgError, setImgError] = useState(false);
   const hasImage = !!project.image && !imgError;
   const status = project.status ?? 'new';
+  const isPriority = project.is_priority ?? false;
 
-  // Status label formatting
-  const getStatusLabel = (s: string) => {
-    switch (s) {
-      case 'new': return 'New';
-      case 'in_progress': return 'In Progress';
-      case 'proposal': return 'Proposal';
-      case 'approved': return 'Approved';
-      case 'completed': return 'Completed';
-      default: return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ');
-    }
-  };
-
-  // Determine badge color and button based on status
+  // Status configuration matching the reference design
   const getStatusConfig = () => {
     switch (status) {
       case 'approved':
         return {
-          badgeColor: 'bg-green-500 text-white',
+          label: 'Approved',
+          badgeColor: 'bg-[#6B9B7A]', // Muted green
           button: 'Estimate',
-          buttonStyle: 'bg-green-500 hover:bg-green-600 text-white border-green-500',
+          buttonStyle: 'bg-[#6B9B7A] hover:bg-[#5a8a69] text-white border-[#6B9B7A]',
         };
       case 'proposal':
         return {
-          badgeColor: 'bg-green-500 text-white',
+          label: 'Proposal Review',
+          badgeColor: 'bg-[#C8B44D]', // Yellow/gold
           button: 'View Proposal',
-          buttonStyle: 'bg-white hover:bg-gray-50 text-green-600 border-green-500',
+          buttonStyle: 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300',
         };
       case 'in_progress':
+      case 'new':
         return {
-          badgeColor: 'bg-blue-500 text-white',
-          button: 'View Details',
-          buttonStyle: 'bg-white hover:bg-gray-50 text-blue-600 border-blue-500',
+          label: 'Light Count',
+          badgeColor: 'bg-[#5B9AA9]', // Teal/blue
+          button: 'Property Info',
+          buttonStyle: 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300',
         };
       case 'completed':
         return {
-          badgeColor: 'bg-gray-500 text-white',
+          label: 'Fulfilled',
+          badgeColor: 'bg-gray-500',
           button: 'View Details',
-          buttonStyle: 'bg-white hover:bg-gray-50 text-gray-600 border-gray-400',
+          buttonStyle: 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300',
         };
-      default: // 'new' or any other
+      default:
         return {
-          badgeColor: 'bg-yellow-400 text-yellow-900',
+          label: 'Light Count',
+          badgeColor: 'bg-[#5B9AA9]',
           button: 'Property Info',
-          buttonStyle: 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300',
+          buttonStyle: 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300',
         };
     }
   };
 
   const config = getStatusConfig();
-  const statusLabel = getStatusLabel(status);
 
   // Format address
   const streetAddress = project.address || '';
-  const cityStateZip = [
-    project.city,
-    project.state,
-    project.zip_code,
-  ].filter(Boolean).join(', ');
+  const cityStateZip = [project.city, project.state, project.zip_code]
+    .filter(Boolean)
+    .join(project.state && project.zip_code ? ', ' : ' ');
 
   return (
     <div
-      className="rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-shadow bg-white"
+      className="rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-shadow bg-white shadow-sm"
       onClick={() => navigate(`/projects/${project.id}`)}
     >
       {/* Image area with status badge */}
-      <div className="relative h-36 bg-gray-100 flex items-center justify-center overflow-hidden">
-        {/* Status Badge */}
-        <div className={`absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-semibold ${config.badgeColor}`}>
-          {statusLabel}
+      <div className="relative h-40 bg-gray-200 flex items-center justify-center overflow-hidden">
+        {/* Status Badge - positioned in top-left corner */}
+        <div
+          className={`absolute top-0 left-0 px-4 py-1.5 text-xs font-medium text-white ${config.badgeColor}`}
+          style={{
+            clipPath: 'polygon(0 0, 100% 0, 90% 100%, 0 100%)',
+            paddingRight: '24px',
+          }}
+        >
+          {config.label}
         </div>
 
         {hasImage ? (
@@ -107,39 +118,41 @@ export function ProjectCard({ project }: ProjectCardProps) {
 
       {/* Info Section */}
       <div className="px-4 py-3 space-y-2">
-        {/* Address */}
+        {/* Address with star icon */}
         <div className="flex items-start gap-2">
-          <Star className="h-4 w-4 text-yellow-400 fill-yellow-400 shrink-0 mt-0.5" />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
+          <Star
+            className={`h-4 w-4 shrink-0 mt-0.5 ${
+              isPriority ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'
+            }`}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-gray-900 leading-tight">
               {streetAddress || 'No address'}
             </p>
             {cityStateZip && (
-              <p className="text-xs text-gray-500 truncate">{cityStateZip}</p>
+              <p className="text-sm text-gray-600">{cityStateZip}</p>
             )}
           </div>
         </div>
 
-        {/* Project name and button */}
-        <div className="flex items-center justify-between gap-2">
+        {/* Project name and action button */}
+        <div className="flex items-center justify-between gap-3 pt-1">
           <div className="flex items-center gap-2 min-w-0">
-            <GripVertical className="h-4 w-4 text-gray-400 shrink-0" />
-            <p className="text-sm text-gray-600 truncate">
+            <DragHandle />
+            <p className="text-sm text-gray-700 truncate font-medium">
               {project.title || 'Untitled Project'}
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className={`shrink-0 text-xs px-3 py-1 h-auto ${config.buttonStyle}`}
+          <button
+            className={`shrink-0 inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${config.buttonStyle}`}
             onClick={(e) => {
               e.stopPropagation();
               navigate(`/projects/${project.id}`);
             }}
           >
-            <ExternalLink className="h-3 w-3 mr-1" />
+            <ExternalLink className="h-3 w-3" />
             {config.button}
-          </Button>
+          </button>
         </div>
       </div>
     </div>
