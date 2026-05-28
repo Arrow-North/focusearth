@@ -49,8 +49,9 @@ const colorMap: Record<string, string> = {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, userType, signOut } = useAuth();
+  const { profile, userType, signOut, isLoading } = useAuth();
   const [ordersOpen, setOrdersOpen] = useState(location.pathname.startsWith("/orders"));
+
 
   const isOrdersActive = location.pathname.startsWith("/orders");
   const isAdminUser = isAdmin(userType);
@@ -93,7 +94,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         {/* Navigation */}
         <nav className="flex-1 py-4 overflow-y-auto">
-          {/* Recent Activity */}
+          {isLoading ? (
+            <div className="px-10 space-y-2 mt-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-10 rounded-md bg-sidebar-border/40 animate-pulse" />
+              ))}
+            </div>
+          ) : (<>
           <NavLink
             to="/"
             end
@@ -362,6 +369,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               </NavLink>
             </>
           )}
+
+          </>)}
 
           <div className="my-4 border-t border-sidebar-border" />
 
