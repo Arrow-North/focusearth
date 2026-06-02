@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import type {
   EstimateSU,
   EstimateREU,
+  EstimateDetail,
   EstimateTableType,
   EstimateStage,
   OrderPath,
@@ -55,20 +56,17 @@ export function useEstimates(filters: EstimateFilters = {}) {
 }
 
 export function useEstimate(id: number | undefined, tableType: EstimateTableType) {
-  const tableName = tableType === 'estimate_reu' ? 'estimate_reu' : 'estimate';
-
   return useQuery({
     queryKey: ['estimate', id, tableType],
     queryFn: async () => {
       if (!id) throw new Error('Estimate ID is required');
-      const { data, error } = await supabase
-        .from(tableName)
-        .select('*')
-        .eq('id', id)
-        .single();
+      const { data, error } = await supabase.rpc('fn_get_estimate', {
+        p_estimate_id: id,
+        p_table_type: tableType,
+      } as never);
 
       if (error) throw error;
-      return data as unknown as EstimateSU | EstimateREU;
+      return data as unknown as EstimateDetail;
     },
     enabled: !!id,
   });

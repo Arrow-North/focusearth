@@ -51,8 +51,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(s?.user ?? null);
         if (!s?.user) {
           setProfile(null);
+          setIsLoading(false); // No user — fully resolved.
         }
-        setIsLoading(false);
+        // When a user exists, keep isLoading=true until the profile effect below resolves.
       }
     );
 
@@ -60,14 +61,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Fetch profile separately — never inside onAuthStateChange to avoid deadlocks.
+  // isLoading stays true until this resolves so RoleGuard doesn't redirect prematurely.
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
 
+    setIsLoading(true);
     fetchProfile(user.id).then((p) => {
-      if (!cancelled && p) setProfile(p);
+      if (!cancelled) {
+        if (p) setProfile(p);
+        setIsLoading(false);
+      }
     }).catch((err) => {
       console.error('[auth] profile fetch error:', err);
+      if (!cancelled) setIsLoading(false);
     });
 
     return () => { cancelled = true; };

@@ -275,6 +275,173 @@ export interface EstimateREU {
   luminaires: Luminaire[] | null;
 }
 
+// --- Estimate Detail (enriched API response) ---
+
+export interface EstimateDetailCompany {
+  id: number;
+  name: string;
+  notes: string | null;
+  address: string | null;
+  address2: string | null;
+  image: string | null;
+  state: string | null;
+  status: number | null;
+  type: string | null;
+  website: string | null;
+  zipCode: string | null;
+  country: string | null;
+  city: string | null;
+  isDeleted: boolean;
+  recordId: string | null;
+  companySubType: string | null;
+  propertyPriorities: string[];
+  serviceAreas: string[];
+}
+
+export interface EstimateDetailUser {
+  id: number;
+  email: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  type: string;
+  title: string | null;
+  avatar: string | null;
+  phone: string | null;
+  enabled: boolean;
+  isDeleted: boolean;
+  recordId: string | null;
+  associatedToCompany: EstimateDetailCompany | null;
+  company?: any[];
+}
+
+export interface EstimateDetailProject {
+  id: number;
+  title: string | null;
+  address: string | null;
+  address2: string | null;
+  city: string | null;
+  state: string | null;
+  zipCode: number | null;
+  status: string | null;
+  statusAdmin: string | null;
+  image: string | null;
+  propertyType: string | null;
+  propertySize: string | null;
+  propertyPriorities: string[];
+  salesTax: string | null;
+  costPerKilowattHour: string | null;
+  operationDaysPerYear: number | null;
+  beFinancing: string | null;
+  depositAmount: number | null;
+  interestRate: string | null;
+  laborCost: string | null;
+  lightCount: string | null;
+  lightCountEstimate: string | null;
+  loanPeriod: number | null;
+  notes: string | null;
+  areas: Record<string, unknown>[];
+  files: unknown | null;
+  proposals: unknown | null;
+  bidding: boolean;
+  requestLightCount: boolean;
+  priorityAdmin: boolean;
+  archived: boolean;
+  complienceHyperlink: string | null;
+  airtableId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface EstimateDetailReport {
+  id: number;
+  status: string;
+  notes: string | null;
+  sortId: number | null;
+  proposal: Record<string, unknown>[];
+  illumination: unknown[];
+  proposalName: string;
+  systemPrice: string | null;
+  ledPrice: string | null;
+  costYear: string | null;
+  addedCRI: string | null;
+  addedLumens: string | null;
+  payback: string | null;
+  bidding: boolean;
+  ETAdays: string | null;
+  installation: string | null;
+  customPricing: Record<string, boolean> | null;
+  availability: string | null;
+  lightCountWaiver: string | null;
+  rebates: string | null;
+  shipping: string | null;
+  colorTunable: string | null;
+  lumenIncreaseSqFt: string | null;
+  lumenIncreaseFixture: string | null;
+  tax: string | null;
+  sensors: string | null;
+  KWReduced: string | null;
+  createdAt: string | null;
+  approved: boolean;
+  active: boolean;
+  project: EstimateDetailProject | null;
+}
+
+export interface EstimateDetail {
+  id: number;
+  orderUid: string | null;
+  reference: string | null;
+  createdAt: string | null;
+  orderDateCreated: string | null;
+  orderDateUpdated: string | null;
+  updatedAt: string | null;
+  suSignature: string | null;
+  adminSignature: string | null;
+  salesTax: string | null;
+  rebates: string | null;
+  shipping: string | null;
+  suApproved: boolean;
+  suSignatureDate: string | null;
+  adminSignatureDate: string | null;
+  suNotes: string | null;
+  depositAmount: string | null;
+  depositDue: string | null;
+  remainderDue: string | null;
+  remainderAmount: string | null;
+  isOrder: boolean;
+  isEstimate: boolean;
+  isShipping: boolean;
+  shippingStatus: string | null;
+  luminaires: Record<string, unknown>[];
+  shippingDateCreated: string | null;
+  shippingDateUpdated: string | null;
+  isInvoice: boolean;
+  invoiceDateCreated: string | null;
+  invoiceDateUpdated: string | null;
+  isReceipt: boolean;
+  receiptDateCreated: string | null;
+  receiptDateUpdated: string | null;
+  markedFulfilled: boolean;
+  archived: boolean;
+  archivedDateCreated: string | null;
+  archivedDateUpdated: string | null;
+  markedFulfilledDateCreated: string | null;
+  markedFulfilledDateUpdated: string | null;
+  report: EstimateDetailReport | null;
+  userReu: EstimateDetailUser | null;
+  userSu: EstimateDetailUser | null;
+  userAdminConsultant: EstimateDetailUser | null;
+  invoiceFiles: unknown[];
+  receiptFiles: unknown[];
+  shippingDetails: unknown[];
+  fulfilledByUserEstimateSu: EstimateDetailUser | null;
+  fulfilledByUserOrderSu: EstimateDetailUser | null;
+  fulfilledByUserShippingSu: EstimateDetailUser | null;
+  fulfilledByUserInvoiceSu: EstimateDetailUser | null;
+  fulfilledByUserReceiptSu: EstimateDetailUser | null;
+  archivedByUserEstimateSu: EstimateDetailUser | null;
+}
+
 export interface EstimateEU {
   id: number;
   user_id: string | null;
