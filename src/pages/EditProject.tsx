@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -366,7 +366,7 @@ export default function EditProject() {
     });
   };
 
-  const adjustPriority = (label: string, delta: number) => {
+  const adjustPriority = useCallback((label: string, delta: number) => {
     setPriorities((prev) => {
       const total = Object.values(prev).reduce((a, b) => a + b, 0);
       const current = prev[label] ?? 0;
@@ -374,7 +374,22 @@ export default function EditProject() {
       if (total - current + next > 100) return prev;
       return { ...prev, [label]: next };
     });
-  };
+  }, []);
+
+  const totalPriority = useMemo(
+    () => Object.values(priorities).reduce((a, b) => a + b, 0),
+    [priorities],
+  );
+
+  const pieData = useMemo(() => {
+    const slices = PRIORITY_LABELS
+      .filter((l) => priorities[l] > 0)
+      .map((l) => ({ name: l, value: priorities[l], color: PRIORITY_COLORS[l] }));
+    const remainder = 100 - totalPriority;
+    if (slices.length === 0) return [{ name: 'Empty', value: 100, color: '#d1d5db' }];
+    if (remainder > 0) return [...slices, { name: 'Unallocated', value: remainder, color: '#d1d5db' }];
+    return slices;
+  }, [priorities, totalPriority]);
 
   const handleFileDrop = useCallback(
     async (fileList: FileList) => {
@@ -692,93 +707,69 @@ export default function EditProject() {
                 )} />
 
                 {/* Project Priorities */}
-                {(() => {
-                  const totalPriority = Object.values(priorities).reduce((a, b) => a + b, 0);
-                  return (
-                    <div>
-                      <p className="text-green-700 font-semibold text-xs mb-3">Project Priorities:</p>
-                      <div className="flex gap-6">
-                        {/* Priority controls */}
-                        <div className="flex-1 grid grid-cols-2 gap-3">
-                          {PRIORITY_LABELS.map((label) => (
-                            <div
-                              key={label}
-                              className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2"
-                            >
-                              <div className="w-1.5 h-8 rounded-sm" style={{ backgroundColor: PRIORITY_COLORS[label] }} />
-                              <span className="text-sm font-medium min-w-[100px]">{label}</span>
-                              <button
-                                type="button"
-                                disabled={totalPriority >= 100}
-                                className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                                  totalPriority >= 100
-                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                    : 'bg-green-600 text-white hover:bg-green-700'
-                                }`}
-                                onClick={() => adjustPriority(label, 5)}
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={priorities[label] === 0}
-                                className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                                  priorities[label] === 0
-                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                    : 'bg-red-500 text-white hover:bg-red-600'
-                                }`}
-                                onClick={() => adjustPriority(label, -5)}
-                              >
-                                <Minus className="h-3.5 w-3.5" />
-                              </button>
-                              <span className="text-sm text-gray-600 ml-auto">{priorities[label]}%</span>
-                            </div>
-                          ))}
+                <div>
+                  <p className="text-green-700 font-semibold text-xs mb-3">Project Priorities:</p>
+                  <div className="flex gap-6">
+                    {/* Priority controls */}
+                    <div className="flex-1 grid grid-cols-2 gap-3">
+                      {PRIORITY_LABELS.map((label) => (
+                        <div
+                          key={label}
+                          className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2"
+                        >
+                          <div className="w-1.5 h-8 rounded-sm" style={{ backgroundColor: PRIORITY_COLORS[label] }} />
+                          <span className="text-sm font-medium min-w-[100px]">{label}</span>
+                          <button
+                            type="button"
+                            disabled={totalPriority >= 100}
+                            className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                              totalPriority >= 100
+                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                : 'bg-green-600 text-white hover:bg-green-700'
+                            }`}
+                            onClick={() => adjustPriority(label, 5)}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={priorities[label] === 0}
+                            className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                              priorities[label] === 0
+                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                : 'bg-red-500 text-white hover:bg-red-600'
+                            }`}
+                            onClick={() => adjustPriority(label, -5)}
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="text-sm text-gray-600 ml-auto">{priorities[label]}%</span>
                         </div>
-
-                        {/* Pie chart */}
-                        <div className="shrink-0 h-72 w-72">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie
-                                data={(() => {
-                                  const slices = PRIORITY_LABELS
-                                    .filter((l) => priorities[l] > 0)
-                                    .map((l) => ({ name: l, value: priorities[l], color: PRIORITY_COLORS[l] }));
-                                  const remainder = 100 - totalPriority;
-                                  if (slices.length === 0) return [{ name: 'Empty', value: 100, color: '#d1d5db' }];
-                                  if (remainder > 0) return [...slices, { name: 'Unallocated', value: remainder, color: '#d1d5db' }];
-                                  return slices;
-                                })()}
-                                dataKey="value"
-                                nameKey="name"
-                                cx="50%"
-                                cy="50%"
-                                outerRadius={115}
-                                innerRadius={0}
-                              >
-                                {(() => {
-                                  const slices = PRIORITY_LABELS
-                                    .filter((l) => priorities[l] > 0)
-                                    .map((l) => ({ name: l, value: priorities[l], color: PRIORITY_COLORS[l] }));
-                                  const remainder = 100 - totalPriority;
-                                  const pieData = slices.length === 0
-                                    ? [{ name: 'Empty', value: 100, color: '#d1d5db' }]
-                                    : remainder > 0
-                                      ? [...slices, { name: 'Unallocated', value: remainder, color: '#d1d5db' }]
-                                      : slices;
-                                  return pieData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                  ));
-                                })()}
-                              </Pie>
-                            </PieChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  );
-                })()}
+
+                    {/* Pie chart */}
+                    <div className="shrink-0 h-72 w-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={pieData}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={115}
+                            innerRadius={0}
+                          >
+                            {pieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
