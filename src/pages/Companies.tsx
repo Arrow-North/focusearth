@@ -12,7 +12,13 @@ import {
 } from "@/components/ui/select";
 import { useCompanies } from "@/hooks/use-companies";
 import { useDebounce } from "@/hooks/use-debounce";
-import { SlidersHorizontal, Plus, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { SlidersHorizontal, Plus, Search, Loader2, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const typeColorMap: Record<string, string> = {
   REU: "bg-status-purple",
@@ -61,13 +67,26 @@ export default function Companies() {
         </SelectContent>
       </Select>
 
-      <Button
-        className="bg-accent hover:bg-accent/90 text-accent-foreground"
-        onClick={() => navigate("/companies/create")}
-      >
-        <Plus className="h-4 w-4 mr-2" />
-        Add New Company
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
+            <Plus className="h-4 w-4 mr-2" />
+            Add New Company
+            <ChevronDown className="h-4 w-4 ml-2" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" style={{ width: 'var(--radix-dropdown-menu-trigger-width)' }} className="p-1.5 gap-1.5 flex flex-col">
+          <DropdownMenuItem onClick={() => navigate("/companies/create/reu")} className="bg-purple-500 hover:bg-purple-600 focus:bg-purple-600 text-white font-medium py-2.5 justify-center cursor-pointer rounded-md">
+            Real Estate
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/companies/create/su")} className="bg-yellow-500 hover:bg-yellow-600 focus:bg-yellow-600 text-white font-medium py-2.5 justify-center cursor-pointer rounded-md">
+            Supplier
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/companies/create/eu")} className="bg-teal-500 hover:bg-teal-600 focus:bg-teal-600 text-white font-medium py-2.5 justify-center cursor-pointer rounded-md">
+            Electrician
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </>
   );
 
