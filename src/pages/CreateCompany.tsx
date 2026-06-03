@@ -115,7 +115,6 @@ export default function CreateCompany() {
 
   // Reset subtype when type changes
   useEffect(() => {
-    form.setValue('company_sub_type', '');
   }, [selectedType, form]);
 
   // ── Priority logic ─────────────────────────────────────────────────
