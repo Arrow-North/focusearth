@@ -122,6 +122,7 @@ export interface Project {
 
 export interface ProjectArea {
   name: string;
+  title?: string;
   luminaires: Luminaire[];
   [key: string]: unknown;
 }
@@ -130,6 +131,104 @@ export interface Luminaire {
   name?: string;
   quantity?: number;
   wattage?: string;
+
+  // Updated Interface
+  id?: string;
+  qty?: string;
+  ledType?: boolean;
+  areaName?: string;
+  illuminationReport?: string | null;
+
+  // Fixture
+  fixtureApplication?: string;
+  fixtureDepth?: string;
+  fixtureDescription?: string;
+  fixtureDiameter?: string;
+  fixtureExisting?: Record<string, unknown> | null;
+  fixtureLength?: string;
+  fixtureMount?: string;
+  fixtureMountHeight?: string;
+  fixtureLens?: string;
+  fixturePricePerUnit?: string;
+  fixtureStyle?: string;
+  fixtureWidth?: string;
+
+  // Lamp
+  lampBaseCategory?: string;
+  lampBaseCategoryType?: string;
+  lampCategory?: string;
+  lampCategoryType?: string;
+  lampColorTemperature?: string;
+  lampDescription?: string;
+  lampExisting?: Record<string, unknown> | null;
+  lampLensType?: string;
+  lampPerFixture?: string;
+  lampPricePerUnit?: string;
+  lampProductCode?: string;
+  lampWattage?: string;
+
+  // Power supply
+  powerPricePerUnit?: string;
+  powerQTYFixture?: string;
+  powerSupplyDescription?: string;
+  powerSupplyExisting?: Record<string, unknown> | null;
+  powerSupplyManufacturer?: string;
+  powerSupplyModel?: string;
+  powerSupplyProductCode?: string;
+  powerSupplyType?: string;
+
+  // Control
+  controlDimming?: string;
+  controlDescription?: string;
+  controlExisting?: Record<string, unknown> | null;
+  controlManufacturer?: string;
+  controlModel?: string;
+  controlPricePerUnit?: string;
+  controlQTYFixture?: string;
+  controlRecordId?: string;
+  controlType?: string;
+
+  // Accessory A
+  accessoryColorA?: string;
+  accessoryDepthA?: string;
+  accessoryDescriptionA?: string;
+  accessoryDescriptionAQty?: string;
+  accessoryDiameterA?: string;
+  accessoryExisting?: Record<string, unknown> | null;
+  accessoryLengthA?: string;
+  accessoryManufacturerA?: string;
+  accessoryPricePerUnitA?: string;
+  accessoryProductCodeA?: string;
+  accessoryRecordId?: string;
+  accessoryTypeA?: string;
+  accessoryWidthA?: string;
+
+  // Accessory B
+  accessoryColorB?: string;
+  accessoryDepthB?: string;
+  accessoryDescriptionB?: string;
+  accessoryDescriptionBQty?: string;
+  accessoryDiameterB?: string;
+  accessoryLengthB?: string;
+  accessoryManufacturerB?: string;
+  accessoryPricePerUnitB?: string;
+  accessoryProductCodeB?: string;
+  accessoryTypeB?: string;
+  accessoryWidthB?: string;
+
+  // Accessory C
+  accessoryColorC?: string;
+  accessoryDepthC?: string;
+  accessoryDescriptionC?: string;
+  accessoryDescriptionCQty?: string;
+  accessoryDiameterC?: string;
+  accessoryLengthC?: string;
+  accessoryManufacturerC?: string;
+  accessoryPricePerUnitC?: string;
+  accessoryProductCodeC?: string;
+  accessoryTypeC?: string;
+  accessoryWidthC?: string;
+
   [key: string]: unknown;
 }
 
@@ -487,6 +586,7 @@ export interface ProductDetails {
   description?: string;
   supplier?: string;
   productType?: string;
+  type?: string;
   manufacturer?: string;
   orderCode?: string;
   length?: string;
@@ -505,6 +605,7 @@ export interface ProductDetails {
   pricePerUnit?: string;
   warranty?: string;
   l70Lifetime?: string;
+  lifetime?: string;
   dimmability?: string;
   colorTunable?: string;
   powerFactor?: string;

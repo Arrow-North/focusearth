@@ -835,7 +835,7 @@ export default function CreateProject() {
                             <Select value={area.installationSurface} onValueChange={v => updateArea(realIdx, { installationSurface: v })}>
                               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
-                                {['Wood', 'Drywall', 'Metal', 'Concrete', 'Stone'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                                {['Wood', 'Drywall', 'Concrete', 'Metal', 'Stone'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
