@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -80,6 +80,8 @@ type CompanyFormValues = z.infer<typeof companySchema>;
 
 export default function CreateCompany() {
   const navigate = useNavigate();
+  const params = useParams();
+  const companyType = (params['user-type']?.toUpperCase() ?? '') as CompanyType;
   const createCompany = useCreateCompany();
   const auth = useContext(AuthContext);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -110,13 +112,11 @@ export default function CreateCompany() {
     remove: saRemove,
   } = useFieldArray({ control: form.control, name: 'service_areas' });
 
-  const selectedType = useWatch({ control: form.control, name: 'type' });
-  const subtypeOptions = selectedType ? COMPANY_SUBTYPES[selectedType as CompanyType] ?? [] : [];
+  const subtypeOptions = COMPANY_SUBTYPES[companyType] ?? [];
 
-  // Reset subtype when type changes
   useEffect(() => {
-    form.setValue('company_sub_type', '');
-  }, [selectedType, form]);
+    if (companyType) form.setValue('type', companyType);
+  }, [companyType, form]);
 
   // ── Priority logic ─────────────────────────────────────────────────
   const priorities = useWatch({ control: form.control, name: 'property_priorities' });
@@ -125,10 +125,12 @@ export default function CreateCompany() {
   const handlePriorityChange = useCallback(
     (index: number, delta: number) => {
       const current = priorities[index]?.percentage ?? 0;
-      const newValue = Math.max(0, Math.min(100, current + delta));
+      const newValue = Math.max(0, current + delta);
+      const newTotal = totalPercentage - current + newValue;
+      if (newTotal > 100) return;
       form.setValue(`property_priorities.${index}.percentage`, newValue);
     },
-    [form, priorities],
+    [form, priorities, totalPercentage],
   );
 
   // ── Logo upload ────────────────────────────────────────────────────
@@ -172,7 +174,7 @@ export default function CreateCompany() {
   };
 
   return (
-    <DashboardLayout title="Create Company">
+    <DashboardLayout title={`Companies / ${COMPANY_TYPE_LABELS[companyType] ?? ''}`}>
       <div className="max-w-5xl">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -232,39 +234,13 @@ export default function CreateCompany() {
 
                     <FormField
                       control={form.control}
-                      name="type"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Company Type</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {(Object.keys(COMPANY_TYPE_LABELS) as CompanyType[]).map((t) => (
-                                <SelectItem key={t} value={t}>
-                                  {COMPANY_TYPE_LABELS[t]}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
                       name="company_sub_type"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Sub-type</FormLabel>
+                          <FormLabel>Company Type</FormLabel>
                           <Select
                             onValueChange={field.onChange}
                             value={field.value}
-                            disabled={subtypeOptions.length === 0}
                           >
                             <FormControl>
                               <SelectTrigger>
@@ -455,7 +431,7 @@ export default function CreateCompany() {
                             size="icon"
                             className="h-7 w-7"
                             onClick={() => handlePriorityChange(index, 5)}
-                            disabled={(priorities[index]?.percentage ?? 0) >= 100}
+                            disabled={totalPercentage >= 100}
                           >
                             <Plus className="h-3 w-3" />
                           </Button>
@@ -501,7 +477,7 @@ export default function CreateCompany() {
             </Card>
 
             {/* ── Serviceable Areas ────────────────────────────────── */}
-            <Card>
+            {companyType === 'EU' && <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span>Serviceable Areas</span>
@@ -564,7 +540,7 @@ export default function CreateCompany() {
                   Add Area
                 </Button>
               </CardContent>
-            </Card>
+            </Card>}
 
             {/* ── Submit ───────────────────────────────────────────── */}
             <div className="flex justify-end gap-3">

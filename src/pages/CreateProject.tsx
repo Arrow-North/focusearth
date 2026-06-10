@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -261,23 +261,37 @@ export default function CreateProject() {
   // Priority helpers
   const totalPriority = priorities.reduce((a, b) => a + b, 0);
 
-  const adjustPriority = (index: number, delta: number) => {
+  const pieSlices = useMemo(() => {
+    const slices: { pct: number; color: string }[] = [];
+    priorities.forEach((val, i) => {
+      if (val > 0) slices.push({ pct: val / 100, color: PRIORITY_COLORS[i] });
+    });
+    if (totalPriority < 100) slices.push({ pct: (100 - totalPriority) / 100, color: '#E5E7EB' });
+    let cumulative = 0;
+    return slices.map((slice, i) => {
+      if (slice.pct >= 1) return { key: i, isFullCircle: true, color: slice.color, d: '' };
+      const startAngle = cumulative * 360;
+      cumulative += slice.pct;
+      const endAngle = cumulative * 360;
+      const start = polarToCartesian(100, 100, 80, startAngle);
+      const end = polarToCartesian(100, 100, 80, endAngle);
+      const largeArc = slice.pct > 0.5 ? 1 : 0;
+      return { key: i, isFullCircle: false, color: slice.color, d: `M100,100 L${start.x},${start.y} A80,80 0 ${largeArc},1 ${end.x},${end.y} Z` };
+    });
+  }, [priorities, totalPriority]);
+
+  const adjustPriority = useCallback((index: number, delta: number) => {
     setPriorities(prev => {
       const currentTotal = prev.reduce((a, b) => a + b, 0);
       const currentVal = prev[index];
       const newVal = Math.max(0, Math.min(100, currentVal + delta));
       const newTotal = currentTotal - currentVal + newVal;
-
-      // Prevent exceeding 100% total
-      if (newTotal > 100) {
-        return prev;
-      }
-
+      if (newTotal > 100) return prev;
       const next = [...prev];
       next[index] = newVal;
       return next;
     });
-  };
+  }, []);
 
   // Area helpers
   const addArea = () => setAreas(prev => [...prev, createEmptyArea()]);
@@ -674,38 +688,14 @@ export default function CreateProject() {
               {/* Pie chart */}
               <div className="flex-shrink-0 relative">
                 <svg viewBox="0 0 200 200" width="240" height="240">
-                  {totalPriority === 0 ? (
-                    <circle cx="100" cy="100" r="80" fill="#E5E7EB" />
-                  ) : (
-                    (() => {
-                      const slices: { pct: number; color: string }[] = [];
-                      priorities.forEach((val, i) => {
-                        if (val > 0) {
-                          slices.push({ pct: val / 100, color: PRIORITY_COLORS[i] });
-                        }
-                      });
-                      // Add unallocated portion
-                      if (totalPriority < 100) {
-                        slices.push({ pct: (100 - totalPriority) / 100, color: '#E5E7EB' });
-                      }
-
-                      let cumulative = 0;
-                      return slices.map((slice, i) => {
-                        // For a full circle, draw a circle instead of an arc
-                        if (slice.pct >= 1) {
-                          return <circle key={i} cx="100" cy="100" r="80" fill={slice.color} />;
-                        }
-                        const startAngle = cumulative * 360;
-                        cumulative += slice.pct;
-                        const endAngle = cumulative * 360;
-                        const start = polarToCartesian(100, 100, 80, startAngle);
-                        const end = polarToCartesian(100, 100, 80, endAngle);
-                        const largeArc = slice.pct > 0.5 ? 1 : 0;
-                        const d = `M100,100 L${start.x},${start.y} A80,80 0 ${largeArc},1 ${end.x},${end.y} Z`;
-                        return <path key={i} d={d} fill={slice.color} stroke="white" strokeWidth="1" />;
-                      });
-                    })()
-                  )}
+                  {totalPriority === 0
+                    ? <circle cx="100" cy="100" r="80" fill="#E5E7EB" />
+                    : pieSlices.map(slice =>
+                        slice.isFullCircle
+                          ? <circle key={slice.key} cx="100" cy="100" r="80" fill={slice.color} />
+                          : <path key={slice.key} d={slice.d} fill={slice.color} stroke="white" strokeWidth="1" />
+                      )
+                  }
                   <text x="100" y="105" textAnchor="middle" className="text-lg font-bold fill-gray-700">
                     {totalPriority}%
                   </text>
@@ -845,7 +835,7 @@ export default function CreateProject() {
                             <Select value={area.installationSurface} onValueChange={v => updateArea(realIdx, { installationSurface: v })}>
                               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
-                                {['Wood', 'Drywall', 'Metal', 'Concrete', 'Stone'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                                {['Wood', 'Drywall', 'Concrete', 'Metal', 'Stone'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>

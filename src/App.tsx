@@ -115,7 +115,7 @@ const App = () => (
 
             {/* Companies */}
             <Route path="/companies" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><Companies /></RoleGuard></ProtectedRoute>} />
-            <Route path="/companies/create" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><CreateCompany /></RoleGuard></ProtectedRoute>} />
+            <Route path="/companies/create/:user-type" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><CreateCompany /></RoleGuard></ProtectedRoute>} />
             <Route path="/companies/:id" element={<ProtectedRoute><RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au', 'Su', 'Eu', 'Gu']}><CompanyDetail /></RoleGuard></ProtectedRoute>} />
 
             {/* Projects */}
