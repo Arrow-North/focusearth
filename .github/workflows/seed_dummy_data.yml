@@ -1,0 +1,64 @@
+name: Seed Database
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to seed from (e.g., main, develop, staging)"
+        required: true
+        type: string
+        default: "main"
+      confirm:
+        description: "Are you Sure?"
+        required: false
+        type: boolean
+
+jobs:
+  seed:
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SB_ACCESS_TOKEN }}
+      PROJECT_ID: ${{ secrets.SB_PROD_PROJECT_ID }}
+      VITE_SUPABASE_URL: ${{ secrets.SB_PROD_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.SB_PROD_ANON_KEY }}
+      VITE_SUPABASE_SERVICE_KEY: ${{ secrets.SB_PROD_SERVICE_KEY }}
+      VITE_ENV: production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ inputs.branch }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: 18.x
+
+      - name: Install dependencies
+        run: npm install
+        env:
+          NODE_ENV: development
+
+      - name: Link Supabase project
+        run: |
+          npx supabase link --project-ref ${{ env.PROJECT_ID }} --password ${{ secrets.SB_PROD_PASSWORD }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SB_ACCESS_TOKEN }}
+
+      - name: Seed the Database
+        run: npx tsx supabase/seed.ts
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SB_ACCESS_TOKEN }}
+          DATABASE_URL: postgresql://postgres.${{ env.PROJECT_ID }}:${{ secrets.SB_PROD_PASSWORD }}@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+          VITE_SUPABASE_URL: ${{ secrets.SB_PROD_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SB_PROD_ANON_KEY }}
+          VITE_SUPABASE_SERVICE_KEY: ${{ secrets.SB_PROD_SERVICE_KEY }}
