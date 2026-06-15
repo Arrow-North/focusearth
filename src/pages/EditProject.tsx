@@ -1512,7 +1512,7 @@ function LuminairesSubForm({
                   : <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />}
               </div>
 
-            {/* Accordion â€” component breakdown */}
+            {/* Accordion component breakdown */}
             {isOpen && (
               <div className="border border-t-0 border-gray-200 bg-gray-50 px-4 py-3">
                 <div className="flex items-center gap-2 mb-2">
