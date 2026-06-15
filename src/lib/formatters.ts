@@ -47,6 +47,29 @@ export function formatNotificationType(status: number): string {
 }
 
 /**
+ * Build a human-readable summary of a luminaire's components
+ * (fixture, lamp, power supply, control, accessory).
+ */
+export function buildLuminaireSummary(lum: {
+  fixtureDescription?: string;
+  lampPerFixture?: string;
+  lampDescription?: string;
+  powerSupplyDescription?: string;
+  controlDescription?: string;
+  accessoryDescriptionA?: string;
+}): string {
+  const parts: string[] = [];
+  if (lum.fixtureDescription) parts.push(lum.fixtureDescription);
+  if (lum.lampDescription) {
+    parts.push(lum.lampPerFixture ? `(${lum.lampPerFixture}) ${lum.lampDescription}` : lum.lampDescription);
+  }
+  if (lum.powerSupplyDescription) parts.push(`powered by ${lum.powerSupplyDescription}`);
+  if (lum.controlDescription) parts.push(`controlled by ${lum.controlDescription}`);
+  if (lum.accessoryDescriptionA) parts.push(`with ${lum.accessoryDescriptionA}`);
+  return parts.join(', ');
+}
+
+/**
  * Derive initials from first/last name.
  */
 export function getInitials(
