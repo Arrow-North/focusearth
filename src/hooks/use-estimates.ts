@@ -597,3 +597,125 @@ export function useDeleteReceiptFile() {
     },
   });
 }
+
+// ─── Estimate SU List (enriched with company + project) ─────────────────────
+
+export interface EstimateSUListItem {
+  id: number;
+  reference: string | null;
+  created_at: string | null;
+  archived_date_created: string | null;
+  marked_fulfilled_date_created: string | null;
+  is_order: boolean | null;
+  is_shipping: boolean | null;
+  is_invoice: boolean | null;
+  is_receipt: boolean | null;
+  marked_fulfilled: boolean | null;
+  archived: boolean | null;
+  order_uid: string | null;
+  company_id: number | null;
+  report_id: number | null;
+  archived_by_user_estimate_su_id: string | null;
+  fulfilled_by_user_estimate_su_id: string | null;
+  company: { id: number; name: string } | null;
+  report: {
+    id: number;
+    project: { id: number; title: string; state: string | null } | null;
+  } | null;
+  archived_by: { id: string; first_name: string | null; last_name: string | null } | null;
+  fulfilled_by: { id: string; first_name: string | null; last_name: string | null } | null;
+}
+
+export function useEstimatesSUList(page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ['estimates-su-list', { page, pageSize }],
+    queryFn: async () => {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data, error, count } = await supabase
+        .from('estimate')
+        .select(
+          `id, reference, created_at, archived_date_created, marked_fulfilled_date_created,
+           is_order, is_shipping, is_invoice, is_receipt, marked_fulfilled,
+           archived, order_uid, company_id, report_id,
+           archived_by_user_estimate_su_id, fulfilled_by_user_estimate_su_id,
+           company:company!company_id(id, name),
+           report:report!report_id(id, project:project!project_id(id, title, state)),
+           archived_by:profiles!archived_by_user_estimate_su_id(id, first_name, last_name),
+           fulfilled_by:profiles!fulfilled_by_user_estimate_su_id(id, first_name, last_name)`,
+          { count: 'exact' }
+        )
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+      return {
+        rows: (data ?? []) as EstimateSUListItem[],
+        total_count: count ?? 0,
+        page,
+        page_size: pageSize,
+      };
+    },
+  });
+}
+
+export interface EstimateREUListItem {
+  id: number;
+  reference: string | null;
+  created_at: string | null;
+  archived_date_created: string | null;
+  marked_fulfilled_date_created: string | null;
+  is_order: boolean | null;
+  is_shipping: boolean | null;
+  is_invoice: boolean | null;
+  is_receipt: boolean | null;
+  marked_fulfilled: boolean | null;
+  archived: boolean | null;
+  order_uid: string | null;
+  company_id: number | null;
+  report_id: number | null;
+  archived_by_user_estimate_reu_id: string | null;
+  fulfilled_by_user_estimate_reu_id: string | null;
+  company: { id: number; name: string } | null;
+  report: {
+    id: number;
+    project: { id: number; title: string; state: string | null } | null;
+  } | null;
+  archived_by: { id: string; first_name: string | null; last_name: string | null } | null;
+  fulfilled_by: { id: string; first_name: string | null; last_name: string | null } | null;
+}
+
+export function useEstimatesREUList(page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ['estimates-reu-list', { page, pageSize }],
+    queryFn: async () => {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data, error, count } = await supabase
+        .from('estimate_reu')
+        .select(
+          `id, reference, created_at, archived_date_created, marked_fulfilled_date_created,
+           is_order, is_shipping, is_invoice, is_receipt, marked_fulfilled,
+           archived, order_uid, company_id, report_id,
+           archived_by_user_estimate_reu_id, fulfilled_by_user_estimate_reu_id,
+           company:company!company_id(id, name),
+           report:report!report_id(id, project:project!project_id(id, title, state)),
+           archived_by:profiles!archived_by_user_estimate_reu_id(id, first_name, last_name),
+           fulfilled_by:profiles!fulfilled_by_user_estimate_reu_id(id, first_name, last_name)`,
+          { count: 'exact' }
+        )
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+      return {
+        rows: (data ?? []) as EstimateREUListItem[],
+        total_count: count ?? 0,
+        page,
+        page_size: pageSize,
+      };
+    },
+  });
+}
