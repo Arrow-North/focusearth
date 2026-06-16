@@ -9,13 +9,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
+import { useContactSubmissions } from '@/hooks/use-contact-submissions';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { Upload, Database, FileUp, CheckCircle, X, ArrowLeft } from 'lucide-react';
+import { Upload, Database, FileUp, CheckCircle, X, ArrowLeft, Inbox } from 'lucide-react';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { userType } = useAuth();
+  const {
+    data: contactSubmissions,
+    isLoading: contactSubmissionsLoading,
+    error: contactSubmissionsError,
+  } = useContactSubmissions();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -153,6 +159,99 @@ export default function AdminDashboard() {
               Click to upload
             </div>
           </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-6 py-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Contact Submissions</h2>
+              <p className="text-sm text-muted-foreground">
+                Form submissions from real estate and supplier users
+              </p>
+            </div>
+            <div className="rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
+              {contactSubmissions?.total_count ?? 0}
+            </div>
+          </div>
+
+          {contactSubmissionsLoading && (
+            <div className="space-y-3 p-6">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-20 animate-pulse rounded-lg bg-gray-100" />
+              ))}
+            </div>
+          )}
+
+          {contactSubmissionsError && (
+            <p className="p-6 text-sm text-destructive">
+              Failed to load contact submissions: {(contactSubmissionsError as Error).message}
+            </p>
+          )}
+
+          {!contactSubmissionsLoading && !contactSubmissionsError && contactSubmissions?.rows.length === 0 && (
+            <div className="flex flex-col items-center justify-center px-6 py-12 text-muted-foreground">
+              <Inbox className="mb-3 h-10 w-10" />
+              <p>No contact submissions yet.</p>
+            </div>
+          )}
+
+          {!contactSubmissionsLoading && !contactSubmissionsError && !!contactSubmissions?.rows.length && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-6 py-3 font-medium">Submitted</th>
+                    <th className="px-6 py-3 font-medium">User</th>
+                    <th className="px-6 py-3 font-medium">Company</th>
+                    <th className="px-6 py-3 font-medium">Subject</th>
+                    <th className="px-6 py-3 font-medium">Assigned To</th>
+                    <th className="px-6 py-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {contactSubmissions.rows.map((submission) => {
+                    const submitterType = submission.submitter?.type ?? 'User';
+                    const assigneeName = submission.assignee
+                      ? [submission.assignee.first_name, submission.assignee.last_name].filter(Boolean).join(' ')
+                      : '';
+
+                    return (
+                      <tr key={submission.id} className="align-top">
+                        <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">
+                          {new Date(submission.created_at).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-gray-900">{submission.name}</div>
+                          <div className="text-muted-foreground">{submission.email}</div>
+                          <div className="text-muted-foreground">{submission.phone}</div>
+                          <div className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                            {submitterType}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-gray-700">
+                          {submission.company_name || '-'}
+                        </td>
+                        <td className="min-w-[16rem] px-6 py-4">
+                          <div className="font-medium text-gray-900">{submission.subject}</div>
+                          <p className="mt-1 max-w-md whitespace-pre-wrap text-muted-foreground">
+                            {submission.message}
+                          </p>
+                        </td>
+                        <td className="px-6 py-4 text-gray-700">
+                          {assigneeName || submission.assignee?.email || 'Unassigned'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex rounded-full bg-amber-50 px-2 py-1 text-xs font-medium capitalize text-amber-700">
+                            {submission.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 

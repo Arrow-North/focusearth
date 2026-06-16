@@ -1,23 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { Send } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { useMessages, useSendMessage } from '@/hooks/use-messages';
-import { useContactRecipients } from '@/hooks/use-users';
-import { useAuth } from '@/hooks/useAuth';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -26,113 +14,155 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { MessageSquare, PenSquare, Send } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { useSubmitContactSubmission } from '@/hooks/use-contact-submissions';
+import { useAuth } from '@/hooks/useAuth';
 
-const composeSchema = z.object({
-  receiver_id: z.string().min(1, 'Receiver ID is required'),
-  message: z.string().min(1, 'Message cannot be empty'),
+const contactSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Enter a valid email address'),
+  phone: z.string().min(1, 'Phone number is required'),
+  companyName: z.string().optional(),
+  subject: z.string().min(1, 'Subject is required'),
+  message: z.string().min(1, 'Message is required'),
 });
 
-type ComposeFormValues = z.infer<typeof composeSchema>;
+type ContactFormValues = z.infer<typeof contactSchema>;
 
 export default function Contact() {
-  const { user } = useAuth();
-  const { data: messages, isLoading, error } = useMessages();
-  const { data: recipients, isLoading: recipientsLoading } = useContactRecipients();
-  const sendMessage = useSendMessage();
-  const [composeOpen, setComposeOpen] = useState(false);
+  const { profile } = useAuth();
+  const submitContact = useSubmitContactSubmission();
 
-  const form = useForm<ComposeFormValues>({
-    resolver: zodResolver(composeSchema),
-    defaultValues: { receiver_id: '', message: '' },
+  const form = useForm<ContactFormValues>({
+    resolver: zodResolver(contactSchema),
+    defaultValues: {
+      name: '',
+      email: '',
+      phone: '',
+      companyName: '',
+      subject: '',
+      message: '',
+    },
   });
 
-  // SUPERADMIN first, then Au, each group sorted by name.
-  const sortedRecipients = useMemo(() => {
-    if (!recipients) return [];
-    return [...recipients].sort((a, b) => {
-      if (a.type === 'SUPERADMIN' && b.type !== 'SUPERADMIN') return -1;
-      if (a.type !== 'SUPERADMIN' && b.type === 'SUPERADMIN') return 1;
-      return (a.first_name ?? '').localeCompare(b.first_name ?? '');
-    });
-  }, [recipients]);
-
-  // Auto-select the first recipient once the list loads.
   useEffect(() => {
-    if (sortedRecipients.length > 0 && !form.getValues('receiver_id')) {
-      form.setValue('receiver_id', sortedRecipients[0].id);
-    }
-  }, [sortedRecipients, form]);
+    if (!profile) return;
 
-  const onSubmit = (values: ComposeFormValues) => {
-    sendMessage.mutate(
-      { receiverId: values.receiver_id, message: values.message },
+    form.reset({
+      name: [profile.first_name, profile.last_name].filter(Boolean).join(' '),
+      email: profile.email ?? '',
+      phone: profile.phone ?? '',
+      companyName: profile.company?.name ?? profile.company_to_sync ?? '',
+      subject: '',
+      message: '',
+    });
+  }, [form, profile]);
+
+  const onSubmit = (values: ContactFormValues) => {
+    submitContact.mutate(
+      {
+        name: values.name,
+        email: values.email,
+        phone: values.phone,
+        companyName: values.companyName,
+        subject: values.subject,
+        message: values.message,
+      },
       {
         onSuccess: () => {
-          form.reset();
-          setComposeOpen(false);
+          form.reset({
+            name: values.name,
+            email: values.email,
+            phone: values.phone,
+            companyName: values.companyName,
+            subject: '',
+            message: '',
+          });
         },
       },
     );
   };
 
   return (
-    <DashboardLayout
-      title="Contact"
-      showSearch={false}
-      actions={
-        <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <PenSquare className="mr-2 h-4 w-4" />
-              Compose
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>New Message</DialogTitle>
-            </DialogHeader>
+    <DashboardLayout title="Contact" showSearch={false}>
+      <div className="max-w-3xl">
+        <Card>
+          <CardHeader>
+            <CardTitle>Contact Support</CardTitle>
+          </CardHeader>
+          <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Your name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="you@example.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Phone number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="companyName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Company</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Company name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
                 <FormField
                   control={form.control}
-                  name="receiver_id"
+                  name="subject"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Send To</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={recipientsLoading}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue
-                              placeholder={
-                                recipientsLoading ? 'Loading users...' : 'Select a recipient'
-                              }
-                            />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {sortedRecipients.map((u) => (
-                            <SelectItem key={u.id} value={u.id}>
-                              {[u.first_name, u.last_name].filter(Boolean).join(' ')} — {u.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>Subject</FormLabel>
+                      <FormControl>
+                        <Input placeholder="How can we help?" {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
                 <FormField
                   control={form.control}
                   name="message"
@@ -140,74 +170,23 @@ export default function Contact() {
                     <FormItem>
                       <FormLabel>Message</FormLabel>
                       <FormControl>
-                        <Textarea rows={4} placeholder="Type your message..." {...field} />
+                        <Textarea rows={6} placeholder="Describe your request..." {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setComposeOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={sendMessage.isPending}>
+
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={submitContact.isPending}>
                     <Send className="mr-2 h-4 w-4" />
-                    {sendMessage.isPending ? 'Sending...' : 'Send'}
+                    {submitContact.isPending ? 'Submitting...' : 'Submit'}
                   </Button>
                 </div>
               </form>
             </Form>
-          </DialogContent>
-        </Dialog>
-      }
-    >
-      <div className="max-w-3xl space-y-4">
-        {isLoading && (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-lg" />
-            ))}
-          </div>
-        )}
-
-        {error && (
-          <p className="text-destructive">
-            Failed to load messages: {(error as Error).message}
-          </p>
-        )}
-
-        {!isLoading && (!messages || messages.length === 0) && (
-          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-            <MessageSquare className="h-10 w-10 mb-3" />
-            <p>No messages yet.</p>
-          </div>
-        )}
-
-        {messages?.map((msg) => {
-          const isSent = msg.sender_id === user?.id;
-          return (
-            <Card key={msg.id} className={cn(isSent && 'border-l-4 border-l-blue-400')}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {isSent ? 'Sent' : 'Received'}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {isSent ? `To: ${msg.receiver_id}` : `From: ${msg.sender_id}`}
-                      </span>
-                    </div>
-                    <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
-                  </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {new Date(msg.created_at).toLocaleString()}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );
