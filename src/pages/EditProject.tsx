@@ -1,3 +1,15 @@
+﻿import {
+  type Luminaire as LumData,
+  type ComponentTab,
+  createEmptyLuminaire,
+  buildLuminaireDescription,
+  LuminaireModal,
+} from '@/components/shared/LuminaireEditModal';
+import {
+  RecentLuminairesModal,
+  type LumRowData,
+  type AreaOption,
+} from '@/components/shared/RecentLuminairesModal';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -34,6 +46,7 @@ import { useProject, useUpdateProject, useProjectFiles } from '@/hooks/use-proje
 import { useFileUpload } from '@/hooks/use-file-upload';
 import { useCompanies } from '@/hooks/use-companies';
 import { supabase } from '@/lib/supabase';
+import { buildLuminaireSummary } from '@/lib/formatters';
 import { toast } from 'sonner';
 import {
   Check,
@@ -49,18 +62,30 @@ import {
   Search,
   HelpCircle,
   X,
+  ExternalLink,
+  Clock,
+  Layers
 } from 'lucide-react';
-
-// ── Schemas ──────────────────────────────────────────────────────────
 
 const luminaireSchema = z.object({
   name: z.string().optional(),
   quantity: z.coerce.number().min(0).default(0),
   wattage: z.string().optional(),
+  qty: z.string().optional(),
+  fixtureMountHeight: z.string().optional(),
+  fixtureDescription: z.string().optional(),
+  lampPerFixture: z.string().optional(),
+  lampDescription: z.string().optional(),
+  powerQTYFixture: z.string().optional(),
+  powerSupplyDescription: z.string().optional(),
+  controlQTYFixture: z.string().optional(),
+  controlDescription: z.string().optional(),
+  accessoryDescriptionAQty: z.string().optional(),
+  accessoryDescriptionA: z.string().optional(),
 });
 
 const areaSchema = z.object({
-  name: z.string().min(1, 'Area name is required'),
+  title: z.string().min(1, 'Area title is required'),
   ceiling_height: z.string().optional(),
   daily_usage: z.string().optional(),
   area_sqft: z.string().optional(),
@@ -110,6 +135,7 @@ const INGRESS_RATINGS = ['IP 54', 'IP 55', 'IP 65', 'IP 66', 'IP 67', 'IP 68'];
 
 const PRIORITY_LABELS = ['Price', 'Time', 'Cost', 'Security', 'Human Centric', 'Other'];
 
+
 const PRIORITY_COLORS: Record<string, string> = {
   Price: '#EC4899',
   Time: '#F97316',
@@ -119,7 +145,6 @@ const PRIORITY_COLORS: Record<string, string> = {
   Other: '#6366F1',
 };
 
-// ── Component ────────────────────────────────────────────────────────
 
 export default function EditProject() {
   const { id } = useParams<{ id: string }>();
@@ -142,13 +167,35 @@ export default function EditProject() {
     'Human Centric': 0,
     Other: 0,
   });
-  const [expandedAreas, setExpandedAreas] = useState<Set<number>>(new Set([0]));
+  const [collapsedAreas, setCollapsedAreas] = useState<Set<number>>(new Set());
+  const [areaFilter, setAreaFilter] = useState<string>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Areas/luminaires as last saved to the database. Used by "Recent Luminaires"
+  // so a luminaire that gets replaced in the (unsaved) form stays selectable
+  // until the project is actually saved.
+  const savedAreas = useMemo<AreaOption[]>(() => {
+    if (!project) return [];
+    const raw = project.areas;
+    const parsed = typeof raw === 'string'
+      ? (() => { try { return JSON.parse(raw); } catch { return []; } })()
+      : (raw ?? []);
+    return (parsed as Record<string, unknown>[]).map((a) => ({
+      title: (a.title as string) ?? '',
+      application: (a.application as string) ?? '',
+      luminaires: (a.luminaires as LumRowData[]) ?? [],
+    }));
+  }, [project]);
 
   // Project image upload state
   const [projectImage, setProjectImage] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Area image upload state
+  const [activeAreaImageIndex, setActiveAreaImageIndex] = useState<number | null>(null);
+  const [isUploadingAreaImage, setIsUploadingAreaImage] = useState(false);
+  const areaImageInputRef = useRef<HTMLInputElement>(null);
 
   // Sync Company modal state
   const [syncCompanyOpen, setSyncCompanyOpen] = useState(false);
@@ -156,6 +203,16 @@ export default function EditProject() {
 
   // Light count estimate modal state
   const [lightCountModalOpen, setLightCountModalOpen] = useState(false);
+
+  // Luminaire component edit modal state
+  const [lumModalOpen, setLumModalOpen] = useState(false);
+  const [lumTab, setLumTab] = useState<ComponentTab>('fixture');
+  const [lumData, setLumData] = useState<LumData | null>(null);
+  const editingLum = useRef<{ areaIndex: number; lumIndex: number }>({ areaIndex: 0, lumIndex: 0 });
+
+  // Recent Luminaires modal state
+  const [recentModalOpen, setRecentModalOpen] = useState(false);
+  const recentModalLum = useRef<{ areaIndex: number; lumIndex: number }>({ areaIndex: 0, lumIndex: 0 });
 
   const form = useForm<ProjectFormValues>({
     resolver: zodResolver(projectSchema),
@@ -229,7 +286,7 @@ export default function EditProject() {
         }
         return raw ?? [];
       })().map((a) => ({
-        name: a.name ?? '',
+        title: (a as Record<string, unknown>).title as string ?? '',
         ceiling_height: (a as Record<string, unknown>).ceiling_height as string ?? '',
         daily_usage: (a as Record<string, unknown>).daily_usage as string ?? '',
         area_sqft: (a as Record<string, unknown>).area_sqft as string ?? '',
@@ -244,6 +301,17 @@ export default function EditProject() {
           name: l.name ?? '',
           quantity: l.quantity ?? 0,
           wattage: l.wattage ?? '',
+          qty: l.qty ?? '',
+          fixtureMountHeight: l.fixtureMountHeight ?? '',
+          fixtureDescription: l.fixtureDescription ?? '',
+          lampPerFixture: l.lampPerFixture ?? '',
+          lampDescription: l.lampDescription ?? '',
+          powerQTYFixture: l.powerQTYFixture ?? '',
+          powerSupplyDescription: l.powerSupplyDescription ?? '',
+          controlQTYFixture: l.controlQTYFixture ?? '',
+          controlDescription: l.controlDescription ?? '',
+          accessoryDescriptionAQty: l.accessoryDescriptionAQty ?? '',
+          accessoryDescriptionA: l.accessoryDescriptionA ?? '',
         })),
       })),
     });
@@ -322,6 +390,61 @@ export default function EditProject() {
     }
   }, [projectId]);
 
+  // Area image upload handler
+  const handleAreaImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const areaIndex = activeAreaImageIndex;
+    e.target.value = '';
+    if (!file || areaIndex === null) return;
+
+    // Validate file type
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowed.includes(file.type)) {
+      toast.error('Only JPEG, PNG, WebP, and GIF images are allowed');
+      return;
+    }
+
+    // Validate file size (10 MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be smaller than 10 MB');
+      return;
+    }
+
+    setIsUploadingAreaImage(true);
+
+    try {
+      // Build a unique path using timestamp
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `${projectId}/area_${areaIndex}_${timestamp}_${safeName}`;
+
+      // Upload to Supabase Storage
+      const { error: storageError } = await supabase.storage
+        .from('project-images')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (storageError) {
+        throw new Error(storageError.message);
+      }
+
+      // Get the public URL
+      const { data: urlData } = supabase.storage
+        .from('project-images')
+        .getPublicUrl(storagePath);
+
+      form.setValue(`areas.${areaIndex}.image`, urlData.publicUrl);
+      toast.success('Image uploaded');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      toast.error(`Image upload failed: ${message}`);
+    } finally {
+      setIsUploadingAreaImage(false);
+    }
+  }, [projectId, activeAreaImageIndex, form]);
+
   const onSubmit = async (values: ProjectFormValues) => {
     if (!projectId) return;
 
@@ -358,7 +481,7 @@ export default function EditProject() {
   };
 
   const toggleArea = (idx: number) => {
-    setExpandedAreas((prev) => {
+    setCollapsedAreas((prev) => {
       const next = new Set(prev);
       if (next.has(idx)) next.delete(idx);
       else next.add(idx);
@@ -401,6 +524,76 @@ export default function EditProject() {
     [projectId, upload],
   );
 
+  const openLumModal = useCallback((areaIndex: number, lumIndex: number, componentLabel: string) => {
+    const vals = form.getValues(`areas.${areaIndex}.luminaires.${lumIndex}`) ?? {};
+    const data = createEmptyLuminaire();
+    data.fixture.qty = vals.qty ?? String(vals.quantity ?? '');
+    data.fixture.mountHeight = vals.fixtureMountHeight ?? '';
+    data.fixture.description = vals.fixtureDescription ?? '';
+    data.lamp.qtyPerFixture = vals.lampPerFixture ?? '';
+    data.lamp.description = vals.lampDescription ?? '';
+    data.powerSupply.qtyPerFixture = vals.powerQTYFixture ?? '';
+    data.powerSupply.description = vals.powerSupplyDescription ?? '';
+    data.control.qtyPerFixture = vals.controlQTYFixture ?? '';
+    data.control.description = vals.controlDescription ?? '';
+    data.accessories[0].qtyPerFixture = vals.accessoryDescriptionAQty ?? '';
+    data.accessories[0].description = vals.accessoryDescriptionA ?? '';
+    data.luminaireDescription = [data.fixture.description, data.lamp.description, data.powerSupply.description, data.control.description, data.accessories[0]?.description].filter(Boolean).join(' , ');
+    editingLum.current = { areaIndex, lumIndex };
+    setLumData(data);
+    setLumTab(COMP_TAB_MAP[componentLabel] ?? 'fixture');
+    setLumModalOpen(true);
+  }, [form]);
+
+  const handleLumModalChange = useCallback((patch: Partial<LumData>) => {
+    setLumData((prev) => {
+      if (!prev) return null;
+      const updated: LumData = { ...prev, ...patch };
+      const { areaIndex, lumIndex } = editingLum.current;
+      const base = `areas.${areaIndex}.luminaires.${lumIndex}` as const;
+      if (patch.fixture) {
+        form.setValue(`${base}.qty`, updated.fixture.qty);
+        form.setValue(`${base}.fixtureMountHeight`, updated.fixture.mountHeight);
+        form.setValue(`${base}.fixtureDescription`, updated.fixture.description);
+      }
+      if (patch.lamp) {
+        form.setValue(`${base}.lampPerFixture`, updated.lamp.qtyPerFixture);
+        form.setValue(`${base}.lampDescription`, updated.lamp.description);
+      }
+      if (patch.powerSupply) {
+        form.setValue(`${base}.powerQTYFixture`, updated.powerSupply.qtyPerFixture);
+        form.setValue(`${base}.powerSupplyDescription`, updated.powerSupply.description);
+      }
+      if (patch.control) {
+        form.setValue(`${base}.controlQTYFixture`, updated.control.qtyPerFixture);
+        form.setValue(`${base}.controlDescription`, updated.control.description);
+      }
+      if (patch.accessories) {
+        const acc0 = updated.accessories[0];
+        form.setValue(`${base}.accessoryDescriptionAQty`, acc0?.qtyPerFixture ?? '');
+        form.setValue(`${base}.accessoryDescriptionA`, acc0?.description ?? '');
+      }
+      return updated;
+    });
+  }, [form]);
+
+  const handleRecentApply = useCallback((data: LumRowData) => {
+    const { areaIndex, lumIndex } = recentModalLum.current;
+    const base = `areas.${areaIndex}.luminaires.${lumIndex}` as const;
+    form.setValue(`${base}.qty`, data.qty ?? '');
+    form.setValue(`${base}.fixtureMountHeight`, data.fixtureMountHeight ?? '');
+    form.setValue(`${base}.fixtureDescription`, data.fixtureDescription ?? '');
+    form.setValue(`${base}.lampPerFixture`, data.lampPerFixture ?? '');
+    form.setValue(`${base}.lampDescription`, data.lampDescription ?? '');
+    form.setValue(`${base}.powerQTYFixture`, data.powerQTYFixture ?? '');
+    form.setValue(`${base}.powerSupplyDescription`, data.powerSupplyDescription ?? '');
+    form.setValue(`${base}.controlQTYFixture`, data.controlQTYFixture ?? '');
+    form.setValue(`${base}.controlDescription`, data.controlDescription ?? '');
+    form.setValue(`${base}.accessoryDescriptionAQty`, data.accessoryDescriptionAQty ?? '');
+    form.setValue(`${base}.accessoryDescriptionA`, data.accessoryDescriptionA ?? '');
+    form.setValue(`${base}.wattage`, data.wattage ?? '');
+  }, [form]);
+
   if (isLoading) {
     return (
       <DashboardLayout title="Edit Project" showSearch={false}>
@@ -439,9 +632,8 @@ export default function EditProject() {
 
   return (
     <DashboardLayout title={<span><Link to="/projects" className="hover:underline">Projects</Link><span className="mx-2">/</span><span>Edit Project</span></span>} showSearch={false} actions={headerActions}>
-      {/* ── Tabs ──────────────────────────────────────────────── */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="flex border-b border-gray-200">
+      <div className="bg-transparent">
+        <div className="flex">
           {(['property', 'luminaires', 'uploads'] as const).map((tab) => (
             <button
               key={tab}
@@ -459,9 +651,8 @@ export default function EditProject() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            {/* ── Property Tab ───────────────────────────────── */}
             {activeTab === 'property' && (
-              <div className="p-6 space-y-6">
+              <div className="p-6 space-y-6 border border-[#E2E8F0]">
                 {/* Image + basic fields row */}
                 <div className="flex gap-6">
                   {/* Image */}
@@ -773,14 +964,20 @@ export default function EditProject() {
               </div>
             )}
 
-            {/* ── Luminaires Tab ──────────────────────────────── */}
             {activeTab === 'luminaires' && (
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-4 border border-[##E2E8F0] bg-[#f2f2f2]">
+                <input
+                  ref={areaImageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleAreaImageUpload}
+                />
                 {/* Area selector + add button */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-bold text-gray-700">Area:</span>
-                    <Select>
+                    <Select value={areaFilter} onValueChange={setAreaFilter}>
                       <SelectTrigger className="w-56">
                         <SelectValue placeholder="All Areas" />
                       </SelectTrigger>
@@ -788,7 +985,7 @@ export default function EditProject() {
                         <SelectItem value="all">All Areas</SelectItem>
                         {areaFields.map((a, i) => (
                           <SelectItem key={a.id} value={String(i)}>
-                            {form.watch(`areas.${i}.name`) || `Area ${i + 1}`}
+                            {form.watch(`areas.${i}.title`) || `Area ${i + 1}`}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -797,10 +994,10 @@ export default function EditProject() {
                   <Button
                     type="button"
                     size="sm"
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    className="bg-[#8FCF74] hover:bg-[#8FCF74] text-gray-700"
                     onClick={() => {
                       appendArea({
-                        name: '',
+                        title: '',
                         ceiling_height: '',
                         daily_usage: '',
                         area_sqft: '',
@@ -813,16 +1010,17 @@ export default function EditProject() {
                         image: '',
                         luminaires: [],
                       });
-                      setExpandedAreas((prev) => new Set(prev).add(areaFields.length));
                     }}
                   >
-                    <Plus className="h-4 w-4 mr-1" />
+                    <Layers className="h-4 w-4 mr-1" />
                     Add New Area
                   </Button>
                 </div>
 
                 {/* Area sections */}
-                {areaFields.map((areaField, areaIndex) => (
+                {areaFields.map((areaField, areaIndex) => {
+                  if (areaFilter !== 'all' && areaFilter !== String(areaIndex)) return null;
+                  return (
                   <div key={areaField.id} className="relative">
                     {/* Delete button */}
                     <button
@@ -834,10 +1032,10 @@ export default function EditProject() {
                     </button>
 
                     {/* Area header */}
-                    <div className="bg-slate-700 text-white rounded-t-lg px-4 py-3 flex items-center justify-between">
+                    <div className="bg-[#2c628d] text-white rounded-t-lg px-4 py-3 flex items-center justify-between">
                       <FormField
                         control={form.control}
-                        name={`areas.${areaIndex}.name`}
+                        name={`areas.${areaIndex}.title`}
                         render={({ field }) => (
                           <input
                             className="bg-transparent text-white text-lg font-bold border-none outline-none placeholder:text-gray-300 w-64"
@@ -850,13 +1048,27 @@ export default function EditProject() {
                         <Button
                           type="button"
                           size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white border-none"
+                          className="bg-[#ffe68d] hover:bg-[##ffe68d] text-gray-700 border-none"
                           onClick={() => {
                             const lums = form.getValues(`areas.${areaIndex}.luminaires`);
+                            const newIndex = lums.length;
                             form.setValue(`areas.${areaIndex}.luminaires`, [
                               ...lums,
-                              { name: '', quantity: 0, wattage: '' },
+                              {
+                                name: '', quantity: 0, wattage: '',
+                                qty: '', fixtureMountHeight: '',
+                                fixtureDescription: '', lampPerFixture: '', lampDescription: '',
+                                powerQTYFixture: '', powerSupplyDescription: '',
+                                controlQTYFixture: '', controlDescription: '',
+                                accessoryDescriptionAQty: '', accessoryDescriptionA: '',
+                              },
                             ]);
+                            setCollapsedAreas((prev) => {
+                              const next = new Set(prev);
+                              next.delete(areaIndex);
+                              return next;
+                            });
+                            openLumModal(areaIndex, newIndex, 'Fixture');
                           }}
                         >
                           <Lightbulb className="h-4 w-4 mr-1" />
@@ -865,11 +1077,11 @@ export default function EditProject() {
                         <Button
                           type="button"
                           size="sm"
-                          className="bg-gray-800 hover:bg-gray-900 text-white border-none"
+                          className="bg-[#2c628d] hover:bg-[#2c628d] text-white border border-white"
                           onClick={() => toggleArea(areaIndex)}
                         >
                           Area Details
-                          {expandedAreas.has(areaIndex) ? (
+                          {!collapsedAreas.has(areaIndex) ? (
                             <ChevronUp className="h-4 w-4 ml-1" />
                           ) : (
                             <ChevronDown className="h-4 w-4 ml-1" />
@@ -879,42 +1091,59 @@ export default function EditProject() {
                     </div>
 
                     {/* Area details (collapsible) */}
-                    {expandedAreas.has(areaIndex) && (
-                      <div className="border border-t-0 border-gray-200 rounded-b-lg p-4 space-y-4">
+                    {!collapsedAreas.has(areaIndex) && (
+                      
+                      <div className="p-4 space-y-4">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mb-2 text-xs bg-[#8FCF74] hover:bg-[#8FCF74] text-gray-700 hover:text-gray-700"
+                          onClick={() => {
+                            setActiveAreaImageIndex(areaIndex);
+                            areaImageInputRef.current?.click();
+                          }}
+                          disabled={isUploadingAreaImage && activeAreaImageIndex === areaIndex}
+                        >
+                          <ImageIcon className="h-3 w-3 mr-1" />
+                          {isUploadingAreaImage && activeAreaImageIndex === areaIndex ? 'Uploading...' : 'Upload Photo'}
+                        </Button>
                         {/* Image + details grid */}
                         <div className="flex gap-4">
                           <div className="shrink-0">
-                            <Button type="button" size="sm" variant="outline" className="mb-2 text-xs bg-green-50 text-green-700 border-green-300">
-                              <ImageIcon className="h-3 w-3 mr-1" />
-                              Upload Photo
-                            </Button>
-                            <div className="w-64 h-48 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center">
-                              <Lightbulb className="h-12 w-12 text-gray-300" strokeWidth={1} />
+                            <div className="w-64 h-full bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center overflow-hidden">
+                              {isUploadingAreaImage && activeAreaImageIndex === areaIndex ? (
+                                <div className="animate-spin h-8 w-8 border-2 border-green-600 border-t-transparent rounded-full" />
+                              ) : form.watch(`areas.${areaIndex}.image`) ? (
+                                <img src={form.watch(`areas.${areaIndex}.image`)} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <Lightbulb className="h-12 w-12 text-gray-300" strokeWidth={1} />
+                              )}
                             </div>
                           </div>
 
                           <div className="flex-1 grid grid-cols-4 gap-3 content-start">
                             <FormField control={form.control} name={`areas.${areaIndex}.ceiling_height`} render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-green-700 font-semibold text-xs">Ceiling Height (feet):</FormLabel>
+                                <FormLabel className="text-[#2c628d] font-semibold text-xs">Ceiling Height (feet):</FormLabel>
                                 <FormControl><Input {...field} /></FormControl>
                               </FormItem>
                             )} />
                             <FormField control={form.control} name={`areas.${areaIndex}.daily_usage`} render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-green-700 font-semibold text-xs">Daily Usage (hours):</FormLabel>
+                                <FormLabel className="text-[#2c628d] font-semibold text-xs">Daily Usage (hours):</FormLabel>
                                 <FormControl><Input {...field} /></FormControl>
                               </FormItem>
                             )} />
                             <FormField control={form.control} name={`areas.${areaIndex}.area_sqft`} render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-green-700 font-semibold text-xs">Area (sq.ft.):</FormLabel>
+                                <FormLabel className="text-[#2c628d] font-semibold text-xs">Area (sq.ft.):</FormLabel>
                                 <FormControl><Input {...field} /></FormControl>
                               </FormItem>
                             )} />
                             <FormField control={form.control} name={`areas.${areaIndex}.application`} render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-green-700 font-semibold text-xs">Application:</FormLabel>
+                                <FormLabel className="text-[#2c628d] font-semibold text-xs">Application:</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                   <FormControl><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                   <SelectContent>
@@ -926,7 +1155,7 @@ export default function EditProject() {
 
                             <FormField control={form.control} name={`areas.${areaIndex}.voltage`} render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-green-700 font-semibold text-xs">Voltage:</FormLabel>
+                                <FormLabel className="text-[#2c628d] font-semibold text-xs">Voltage:</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                   <FormControl><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                   <SelectContent>
@@ -937,7 +1166,7 @@ export default function EditProject() {
                             )} />
                             <FormField control={form.control} name={`areas.${areaIndex}.installation_surface`} render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-green-700 font-semibold text-xs">Installation Surface:</FormLabel>
+                                <FormLabel className="text-[#2c628d] font-semibold text-xs">Installation Surface:</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                   <FormControl><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                   <SelectContent>
@@ -948,7 +1177,7 @@ export default function EditProject() {
                             )} />
                             <FormField control={form.control} name={`areas.${areaIndex}.control_type`} render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-green-700 font-semibold text-xs">Control Type:</FormLabel>
+                                <FormLabel className="text-[#2c628d] font-semibold text-xs">Control Type:</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                   <FormControl><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                   <SelectContent>
@@ -959,7 +1188,7 @@ export default function EditProject() {
                             )} />
                             <FormField control={form.control} name={`areas.${areaIndex}.ingress_protection`} render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-green-700 font-semibold text-xs">Ingress Protection:</FormLabel>
+                                <FormLabel className="text-[#2c628d] font-semibold text-xs">Ingress Protection:</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                   <FormControl><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                   <SelectContent>
@@ -968,29 +1197,34 @@ export default function EditProject() {
                                 </Select>
                               </FormItem>
                             )} />
+                            <FormField control={form.control} name={`areas.${areaIndex}.notes`} render={({ field }) => (
+                              <FormItem className="col-span-4">
+                                <FormLabel className="text-[#2c628d] font-semibold text-xs">Notes:</FormLabel>
+                                <FormControl><Input {...field} /></FormControl>
+                              </FormItem>
+                            )} />
                           </div>
                         </div>
 
-                        {/* Area notes */}
-                        <FormField control={form.control} name={`areas.${areaIndex}.notes`} render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-green-700 font-semibold text-xs">Notes:</FormLabel>
-                            <FormControl><Input {...field} /></FormControl>
-                          </FormItem>
-                        )} />
+                        <div className="border-b border-[#E2E8F0]"> </div>
 
                         {/* Luminaires table */}
-                        <div>
-                          <div className="flex items-center gap-6 text-sm font-bold text-gray-700 border-b border-gray-200 pb-2 mb-2">
-                            <span className="w-16">QTY</span>
-                            <span>Luminaire Description</span>
-                          </div>
-                          <LuminairesSubForm form={form} areaIndex={areaIndex} />
+                        <div className="!mt-[4rem]">
+                          <LuminairesSubForm
+                            form={form}
+                            areaIndex={areaIndex}
+                            onEditComponent={(lumIndex, componentLabel) => openLumModal(areaIndex, lumIndex, componentLabel)}
+                            onOpenRecent={(lumIndex) => {
+                              recentModalLum.current = { areaIndex, lumIndex };
+                              setRecentModalOpen(true);
+                            }}
+                          />
                         </div>
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
 
                 {areaFields.length === 0 && (
                   <div className="text-center py-12 text-gray-400">
@@ -1001,7 +1235,7 @@ export default function EditProject() {
               </div>
             )}
 
-            {/* ── Uploads Tab ─────────────────────────────────── */}
+            {/* Uploads Tab */}
             {activeTab === 'uploads' && (
               <div className="p-6 space-y-6">
                 <div className="flex items-start justify-between gap-6">
@@ -1173,67 +1407,162 @@ export default function EditProject() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <RecentLuminairesModal
+        open={recentModalOpen}
+        onClose={() => setRecentModalOpen(false)}
+        areas={savedAreas}
+        onApply={handleRecentApply}
+      />
+      <LuminaireModal
+        open={lumModalOpen}
+        onClose={() => setLumModalOpen(false)}
+        tab={lumTab}
+        setTab={setLumTab}
+        luminaire={lumData ?? undefined}
+        onChange={handleLumModalChange}
+      />
     </DashboardLayout>
   );
 }
 
-// ── Luminaires Sub-form ──────────────────────────────────────────────
+// Luminaires Sub-form //
+const LUM_COMPONENTS = [
+  { label: 'Fixture',      qtyField: 'qty',                      descField: 'fixtureDescription' },
+  { label: 'Lamp',         qtyField: 'lampPerFixture',           descField: 'lampDescription' },
+  { label: 'Power Supply', qtyField: 'powerQTYFixture',          descField: 'powerSupplyDescription' },
+  { label: 'Control',      qtyField: 'controlQTYFixture',        descField: 'controlDescription' },
+  { label: 'Accessory',    qtyField: 'accessoryDescriptionAQty', descField: 'accessoryDescriptionA' },
+] as const;
+
+const COMP_TAB_MAP: Record<string, ComponentTab> = {
+  Fixture: 'fixture',
+  Lamp: 'lamp',
+  'Power Supply': 'powerSupply',
+  Control: 'control',
+  Accessory: 'accessories',
+};
+
+function buildSummary(vals: Record<string, string>): string {
+  return buildLuminaireSummary(vals) || vals.name || '';
+}
 
 function LuminairesSubForm({
   form,
   areaIndex,
+  onEditComponent,
+  onOpenRecent,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: any;
   areaIndex: number;
+  onEditComponent: (lumIndex: number, componentLabel: string) => void;
+  onOpenRecent: (lumIndex: number) => void;
 }) {
-  const {
-    fields: lumFields,
-    append: appendLum,
-    remove: removeLum,
-  } = useFieldArray({
+  const { fields: lumFields, remove: removeLum } = useFieldArray({
     control: form.control,
     name: `areas.${areaIndex}.luminaires` as const,
   });
 
+  const [openLuminaires, setOpenLuminaires] = useState<Set<number>>(new Set());
+  const toggleLum = (i: number) =>
+    setOpenLuminaires((prev) => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+
   return (
-    <div className="space-y-2">
-      {lumFields.map((lumField, lumIndex) => (
-        <div key={lumField.id} className="relative flex items-start gap-4">
-          <button
-            type="button"
-            className="absolute -left-3 top-1 w-4 h-4 bg-red-500 text-white rounded-sm flex items-center justify-center"
-            onClick={() => removeLum(lumIndex)}
-          >
-            <Trash2 className="h-2.5 w-2.5" />
-          </button>
-          <FormField
-            control={form.control}
-            name={`areas.${areaIndex}.luminaires.${lumIndex}.quantity`}
-            render={({ field }) => (
-              <FormItem className="w-16">
-                <FormControl>
-                  <Input type="number" className="text-center" {...field} />
-                </FormControl>
-              </FormItem>
+    <div className="grid grid-cols-2 gap-4">
+      {lumFields.map((lumField, lumIndex) => {
+        const isOpen = openLuminaires.has(lumIndex);
+        const base = `areas.${areaIndex}.luminaires.${lumIndex}`;
+        const vals = form.watch(base) ?? {};
+        const summary = buildSummary(vals);
+        const qty = vals.qty || vals.quantity || '';
+
+        return (
+          <div key={lumField.id} className="mb-4">
+
+            {/* Column labels - outside the box */}
+            <div className="flex gap-2 text-xs font-bold text-gray-500 uppercase pb-1 px-1">
+              <span className="w-14 shrink-0">QTY</span>
+              <span className="flex-1">Luminaire Description</span>
+            </div>
+
+            {/* Box wrapper - trash button anchored here */}
+            <div className="relative">
+              <button
+                type="button"
+                className="absolute -left-3 -top-2 w-5 h-5 bg-red-500 text-white rounded-sm flex items-center justify-center z-10"
+                onClick={() => removeLum(lumIndex)}
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+
+              {/* Summary row */}
+              <div
+                className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 cursor-pointer transition-colors mt-4"
+                onClick={() => toggleLum(lumIndex)}
+              >
+                <span className="w-14 shrink-0 text-sm font-medium text-gray-700">{qty}</span>
+                <span className="flex-1 text-sm text-gray-700 leading-snug break-words min-w-0">{summary}</span>
+                {isOpen
+                  ? <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" />
+                  : <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />}
+              </div>
+
+            {/* Accordion component breakdown */}
+            {isOpen && (
+              <div className="border border-t-0 border-gray-200 bg-gray-50 px-4 py-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="grid grid-cols-[110px_1fr_60px] gap-2 flex-1 text-xs font-bold text-gray-400 uppercase">
+                    <span>Component</span>
+                    <span>Description</span>
+                    <span />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="shrink-0 bg-sky-600 hover:bg-sky-700 text-white text-xs h-7 px-2 ml-2"
+                    onClick={() => onOpenRecent(lumIndex)}
+                  >
+                    <Clock className="h-3 w-3 mr-1" />
+                    Recent Luminaires
+                  </Button>
+                </div>
+
+                {LUM_COMPONENTS.map(({ label, descField }) => (
+                  <div key={label} className="grid grid-cols-[110px_1fr_60px] gap-2 text-sm py-1 items-start">
+                    <span className="text-gray-600 text-xs pt-1">{label}</span>
+                    <div className="min-h-7 text-xs px-2 py-1 text-gray-700 border border-gray-200 rounded bg-white break-words leading-snug">
+                      {(form.watch(`${base}.${descField}`) as string) || ''}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 text-xs px-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900"
+                      onClick={() => onEditComponent(lumIndex, label)}
+                    >
+                      <ExternalLink className="h-3 w-3 mr-1" />Edit
+                    </Button>
+                  </div>
+                ))}
+              </div>
             )}
-          />
-          <FormField
-            control={form.control}
-            name={`areas.${areaIndex}.luminaires.${lumIndex}.name`}
-            render={({ field }) => (
-              <FormItem className="flex-1">
-                <FormControl>
-                  <Textarea rows={2} placeholder="Luminaire description..." {...field} />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-        </div>
-      ))}
+            </div>
+          </div>
+        );
+      })}
+
       {lumFields.length === 0 && (
-        <p className="text-xs text-gray-400 py-2">No luminaires. Use the &quot;Add Luminaire&quot; button above.</p>
+        <p className="col-span-2 text-xs text-gray-400 py-2">No luminaires. Use the &quot;Add Luminaire&quot; button above.</p>
       )}
     </div>
   );
 }
+
+
+
+
+

@@ -26,7 +26,8 @@ import { supabase } from '@/lib/supabase';
 import { PROPERTY_TYPES } from '@/lib/constants';
 import {
   CheckCircle,
-  Plus,
+  PlusCircle,
+  MinusCircle,
   Trash2,
   Upload,
   Search,
@@ -35,12 +36,21 @@ import {
   Lightbulb,
   Image,
   RefreshCw,
-  MinusCircle,
-  PlusCircle,
   HelpCircle,
   X,
+  ExternalLink,
+  Clock,
+  Layers,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  type Luminaire as LumData,
+  type ComponentTab,
+  createEmptyLuminaire,
+  LuminaireModal,
+} from '@/components/shared/LuminaireEditModal';
+import { RecentLuminairesModal, type LumRowData, type AreaOption } from '@/components/shared/RecentLuminairesModal';
+import { buildLuminaireSummary } from '@/lib/formatters';
 
 // ---------- US States ----------
 const US_STATES = [
@@ -55,143 +65,55 @@ const PRIORITY_NAMES = ['Price', 'Time', 'Cost', 'Security', 'Human Centric', 'O
 const PRIORITY_COLORS = ['#EC4899', '#F97316', '#84CC16', '#06B6D4', '#A855F7', '#6366F1'];
 
 // ---------- Types ----------
-interface LuminaireFixture {
-  qty: string; mountHeight: string; description: string;
-  application: string; mount: string; style: string; lens: string;
-  dimLength: string; dimWidth: string; dimDepth: string; dimDiameter: string;
-  pricePerUnit: string;
-}
+type FlatLuminaire = {
+  name?: string;
+  quantity: number;
+  wattage?: string;
+  qty?: string;
+  fixtureMountHeight?: string;
+  fixtureDescription?: string;
+  lampPerFixture?: string;
+  lampDescription?: string;
+  powerQTYFixture?: string;
+  powerSupplyDescription?: string;
+  controlQTYFixture?: string;
+  controlDescription?: string;
+  accessoryDescriptionAQty?: string;
+  accessoryDescriptionA?: string;
+};
 
-interface LuminaireLamp {
-  qtyPerFixture: string; description: string;
-  category: string; type: string; baseCategory: string; baseCategoryType: string;
-  wattage: string; colorTemp: string; lensType: string; productCode: string;
-  pricePerUnit: string; led: string;
-}
-
-interface LuminairePowerSupply {
-  qtyPerFixture: string; description: string;
-  type: string; manufacturer: string; model: string; productCode: string;
-  pricePerUnit: string;
-}
-
-interface LuminaireControl {
-  qtyPerFixture: string; description: string;
-  type: string; manufacturer: string; dimming: string; model: string;
-  pricePerUnit: string;
-}
-
-interface LuminaireAccessory {
-  selected: boolean; qtyPerFixture: string; description: string;
-  type: string; manufacturer: string; color: string; productCode: string;
-  dimLength: string; dimWidth: string; dimDepth: string; dimDiameter: string;
-  pricePerUnit: string;
-}
-
-interface Luminaire {
-  luminaireDescription: string;
-  fixture: LuminaireFixture;
-  lamp: LuminaireLamp;
-  powerSupply: LuminairePowerSupply;
-  control: LuminaireControl;
-  accessories: LuminaireAccessory[];
-}
-
-interface AreaData {
-  name: string;
-  detailsOpen: boolean;
-  ceilingHeight: string;
-  dailyUsage: string;
-  areaSqFt: string;
+type AreaData = {
+  title: string;
+  ceiling_height: string;
+  daily_usage: string;
+  area_sqft: string;
   application: string;
   voltage: string;
-  installationSurface: string;
-  controlType: string;
-  ingressProtection: string;
+  installation_surface: string;
+  control_type: string;
+  ingress_protection: string;
   notes: string;
-  luminaires: Luminaire[];
-}
-
-function createEmptyLuminaire(): Luminaire {
-  return {
-    luminaireDescription: '',
-    fixture: { qty: '', mountHeight: '', description: '', application: '', mount: '', style: '', lens: '', dimLength: '', dimWidth: '', dimDepth: '', dimDiameter: '', pricePerUnit: '' },
-    lamp: { qtyPerFixture: '', description: '', category: '', type: '', baseCategory: '', baseCategoryType: '', wattage: '', colorTemp: '', lensType: '', productCode: '', pricePerUnit: '', led: 'No' },
-    powerSupply: { qtyPerFixture: '', description: '', type: '', manufacturer: '', model: '', productCode: '', pricePerUnit: '' },
-    control: { qtyPerFixture: '', description: '', type: '', manufacturer: '', dimming: '', model: '', pricePerUnit: '' },
-    accessories: [{ selected: true, qtyPerFixture: '', description: '', type: '', manufacturer: '', color: '', productCode: '', dimLength: '', dimWidth: '', dimDepth: '', dimDiameter: '', pricePerUnit: '' }],
-  };
-}
+  image: string;
+  luminaires: FlatLuminaire[];
+};
 
 function createEmptyArea(): AreaData {
   return {
-    name: '', detailsOpen: true,
-    ceilingHeight: '', dailyUsage: '', areaSqFt: '', application: '',
-    voltage: '', installationSurface: '', controlType: '', ingressProtection: '',
-    notes: '', luminaires: [],
+    title: '', ceiling_height: '', daily_usage: '', area_sqft: '', application: '',
+    voltage: '', installation_surface: '', control_type: '', ingress_protection: '',
+    notes: '', image: '', luminaires: [],
   };
 }
 
-// Description builders
-
-function buildFixtureSection(f: LuminaireFixture): string {
-  const parts: string[] = [];
-  const dims = [f.dimLength, f.dimWidth, f.dimDepth, f.dimDiameter].filter(Boolean);
-  if (dims.length) parts.push(`${dims.join('x')}`);
-  if (f.mount) parts.push(f.mount);
-  if (f.style) parts.push(f.style);
-  return parts.join(' ');
-}
-
-function buildLampSection(l: LuminaireLamp): string {
-  const parts: string[] = [];
-  if (l.led === 'Yes') parts.push('LED');
-  if (l.category) parts.push(l.category);
-  if (l.type) parts.push(l.type);
-  if (l.baseCategory) parts.push(l.baseCategory);
-  if (l.baseCategoryType) parts.push(l.baseCategoryType);
-  if (l.wattage) parts.push(`${l.wattage}W`);
-  if (l.colorTemp) parts.push(`${l.colorTemp}K`);
-  if (l.lensType) parts.push(l.lensType);
-  if (l.productCode) parts.push(l.productCode);
-  return parts.join(' ');
-}
-
-function buildPowerSupplySection(ps: LuminairePowerSupply): string {
-  const parts: string[] = [];
-  if (ps.type) parts.push(ps.type);
-  if (ps.manufacturer) parts.push(ps.manufacturer);
-  if (ps.model) parts.push(ps.model);
-  if (ps.productCode) parts.push(ps.productCode);
-  return parts.join(' ');
-}
-
-function buildControlSection(c: LuminaireControl): string {
-  const parts: string[] = [];
-  if (c.type) parts.push(c.type);
-  if (c.manufacturer) parts.push(c.manufacturer);
-  if (c.dimming) parts.push(c.dimming);
-  if (c.model) parts.push(c.model);
-  return parts.join(' ');
-}
-
-function buildAccessorySection(a: LuminaireAccessory): string {
-  const parts: string[] = [];
-  if (a.type) parts.push(a.type);
-  if (a.manufacturer) parts.push(a.manufacturer);
-  if (a.color) parts.push(a.color);
-  if (a.productCode) parts.push(a.productCode);
-  return parts.join(' ');
-}
-
-function buildLuminaireDescription(lum: Luminaire): string {
-  return [
-    buildFixtureSection(lum.fixture),
-    buildLampSection(lum.lamp),
-    buildPowerSupplySection(lum.powerSupply),
-    buildControlSection(lum.control),
-    ...lum.accessories.filter(a => a.selected).map(buildAccessorySection).filter(Boolean),
-  ].filter(Boolean).join(' , ');
+function createEmptyFlatLuminaire(): FlatLuminaire {
+  return {
+    name: '', quantity: 0, wattage: '',
+    qty: '', fixtureMountHeight: '',
+    fixtureDescription: '', lampPerFixture: '', lampDescription: '',
+    powerQTYFixture: '', powerSupplyDescription: '',
+    controlQTYFixture: '', controlDescription: '',
+    accessoryDescriptionAQty: '', accessoryDescriptionA: '',
+  };
 }
 
 // ================================================================
@@ -239,12 +161,22 @@ export default function CreateProject() {
   // Luminaires tab state
   const [areas, setAreas] = useState<AreaData[]>([]);
   const [areaFilter, setAreaFilter] = useState('all');
+  const [collapsedAreas, setCollapsedAreas] = useState<Set<number>>(new Set());
 
-  // Luminaire modal state
+  // Luminaire component edit modal state
   const [lumModalOpen, setLumModalOpen] = useState(false);
-  const [lumModalTab, setLumModalTab] = useState<'fixture' | 'lamp' | 'powerSupply' | 'control' | 'accessories'>('fixture');
-  const [editingAreaIdx, setEditingAreaIdx] = useState(0);
-  const [editingLumIdx, setEditingLumIdx] = useState(0);
+  const [lumTab, setLumTab] = useState<ComponentTab>('fixture');
+  const [lumData, setLumData] = useState<LumData | null>(null);
+  const editingLum = useRef<{ areaIndex: number; lumIndex: number }>({ areaIndex: 0, lumIndex: 0 });
+
+  // Recent Luminaires modal state
+  const [recentModalOpen, setRecentModalOpen] = useState(false);
+  const recentModalLum = useRef<{ areaIndex: number; lumIndex: number }>({ areaIndex: 0, lumIndex: 0 });
+
+  // Area image upload state
+  const [activeAreaImageIndex, setActiveAreaImageIndex] = useState<number | null>(null);
+  const [isUploadingAreaImage, setIsUploadingAreaImage] = useState(false);
+  const areaImageInputRef = useRef<HTMLInputElement>(null);
 
   // Uploads tab state
   const [dragOver, setDragOver] = useState(false);
@@ -300,23 +232,14 @@ export default function CreateProject() {
     setAreas(prev => prev.map((a, i) => i === idx ? { ...a, ...patch } : a));
   };
 
-  const addLuminaire = (areaIdx: number) => {
-    setAreas(prev => prev.map((a, i) => i === areaIdx ? { ...a, luminaires: [...a.luminaires, createEmptyLuminaire()] } : a));
+  const toggleArea = (idx: number) => {
+    setCollapsedAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
   };
-
-  const openLumModal = (areaIdx: number, lumIdx: number) => {
-    setEditingAreaIdx(areaIdx);
-    setEditingLumIdx(lumIdx);
-    setLumModalTab('fixture');
-    setLumModalOpen(true);
-  };
-
-  const updateLuminaire = useCallback((areaIdx: number, lumIdx: number, patch: Partial<Luminaire>) => {
-    setAreas(prev => prev.map((a, ai) => ai === areaIdx ? {
-      ...a,
-      luminaires: a.luminaires.map((l, li) => li === lumIdx ? { ...l, ...patch } : l),
-    } : a));
-  }, []);
 
   const removeLuminaire = (areaIdx: number, lumIdx: number) => {
     setAreas(prev => prev.map((a, ai) => ai === areaIdx ? {
@@ -324,6 +247,91 @@ export default function CreateProject() {
       luminaires: a.luminaires.filter((_, li) => li !== lumIdx),
     } : a));
   };
+
+  const openLumModal = useCallback((areaIndex: number, lumIndex: number, componentLabel: string) => {
+    const vals = areas[areaIndex]?.luminaires[lumIndex] ?? createEmptyFlatLuminaire();
+    const data = createEmptyLuminaire();
+    data.fixture.qty = vals.qty ?? String(vals.quantity ?? '');
+    data.fixture.mountHeight = vals.fixtureMountHeight ?? '';
+    data.fixture.description = vals.fixtureDescription ?? '';
+    data.lamp.qtyPerFixture = vals.lampPerFixture ?? '';
+    data.lamp.description = vals.lampDescription ?? '';
+    data.powerSupply.qtyPerFixture = vals.powerQTYFixture ?? '';
+    data.powerSupply.description = vals.powerSupplyDescription ?? '';
+    data.control.qtyPerFixture = vals.controlQTYFixture ?? '';
+    data.control.description = vals.controlDescription ?? '';
+    data.accessories[0].qtyPerFixture = vals.accessoryDescriptionAQty ?? '';
+    data.accessories[0].description = vals.accessoryDescriptionA ?? '';
+    data.luminaireDescription = [data.fixture.description, data.lamp.description, data.powerSupply.description, data.control.description, data.accessories[0]?.description].filter(Boolean).join(' , ');
+    editingLum.current = { areaIndex, lumIndex };
+    setLumData(data);
+    setLumTab(COMP_TAB_MAP[componentLabel] ?? 'fixture');
+    setLumModalOpen(true);
+  }, [areas]);
+
+  const handleLumModalChange = useCallback((patch: Partial<LumData>) => {
+    setLumData((prev) => {
+      if (!prev) return null;
+      const updated: LumData = { ...prev, ...patch };
+      const { areaIndex, lumIndex } = editingLum.current;
+      const fieldPatch: Partial<FlatLuminaire> = {};
+      if (patch.fixture) {
+        fieldPatch.qty = updated.fixture.qty;
+        fieldPatch.fixtureMountHeight = updated.fixture.mountHeight;
+        fieldPatch.fixtureDescription = updated.fixture.description;
+      }
+      if (patch.lamp) {
+        fieldPatch.lampPerFixture = updated.lamp.qtyPerFixture;
+        fieldPatch.lampDescription = updated.lamp.description;
+      }
+      if (patch.powerSupply) {
+        fieldPatch.powerQTYFixture = updated.powerSupply.qtyPerFixture;
+        fieldPatch.powerSupplyDescription = updated.powerSupply.description;
+      }
+      if (patch.control) {
+        fieldPatch.controlQTYFixture = updated.control.qtyPerFixture;
+        fieldPatch.controlDescription = updated.control.description;
+      }
+      if (patch.accessories) {
+        const acc0 = updated.accessories[0];
+        fieldPatch.accessoryDescriptionAQty = acc0?.qtyPerFixture ?? '';
+        fieldPatch.accessoryDescriptionA = acc0?.description ?? '';
+      }
+      setAreas((prevAreas) => prevAreas.map((a, ai) => ai !== areaIndex ? a : {
+        ...a,
+        luminaires: a.luminaires.map((l, li) => li !== lumIndex ? l : { ...l, ...fieldPatch }),
+      }));
+      return updated;
+    });
+  }, []);
+
+  const handleRecentApply = useCallback((data: LumRowData) => {
+    const { areaIndex, lumIndex } = recentModalLum.current;
+    setAreas((prev) => prev.map((a, ai) => ai !== areaIndex ? a : {
+      ...a,
+      luminaires: a.luminaires.map((l, li) => li !== lumIndex ? l : {
+        ...l,
+        qty: data.qty ?? '',
+        fixtureMountHeight: data.fixtureMountHeight ?? '',
+        fixtureDescription: data.fixtureDescription ?? '',
+        lampPerFixture: data.lampPerFixture ?? '',
+        lampDescription: data.lampDescription ?? '',
+        powerQTYFixture: data.powerQTYFixture ?? '',
+        powerSupplyDescription: data.powerSupplyDescription ?? '',
+        controlQTYFixture: data.controlQTYFixture ?? '',
+        controlDescription: data.controlDescription ?? '',
+        accessoryDescriptionAQty: data.accessoryDescriptionAQty ?? '',
+        accessoryDescriptionA: data.accessoryDescriptionA ?? '',
+        wattage: data.wattage ?? '',
+      }),
+    }));
+  }, []);
+
+  const recentAreas = useMemo<AreaOption[]>(() => areas.map((a) => ({
+    title: a.title,
+    application: a.application,
+    luminaires: a.luminaires,
+  })), [areas]);
 
   // File upload
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -393,6 +401,61 @@ export default function CreateProject() {
     }
   }, []);
 
+  // Area image upload handler
+  const handleAreaImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const areaIndex = activeAreaImageIndex;
+    e.target.value = '';
+    if (!file || areaIndex === null) return;
+
+    // Validate file type
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowed.includes(file.type)) {
+      toast.error('Only JPEG, PNG, WebP, and GIF images are allowed');
+      return;
+    }
+
+    // Validate file size (10 MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be smaller than 10 MB');
+      return;
+    }
+
+    setIsUploadingAreaImage(true);
+
+    try {
+      // Build a unique path using timestamp
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `temp/area_${areaIndex}_${timestamp}_${safeName}`;
+
+      // Upload to Supabase Storage
+      const { error: storageError } = await supabase.storage
+        .from('project-images')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (storageError) {
+        throw new Error(storageError.message);
+      }
+
+      // Get the public URL
+      const { data: urlData } = supabase.storage
+        .from('project-images')
+        .getPublicUrl(storagePath);
+
+      updateArea(areaIndex, { image: urlData.publicUrl });
+      toast.success('Image uploaded');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      toast.error(`Image upload failed: ${message}`);
+    } finally {
+      setIsUploadingAreaImage(false);
+    }
+  }, [activeAreaImageIndex]);
+
   // Submit
   const handleDone = async () => {
     if (!title.trim()) {
@@ -423,26 +486,7 @@ export default function CreateProject() {
         deposit_amount: depositAmount ? Number(depositAmount) : undefined,
         be_financing: beFinancing || undefined,
         image: projectImage || undefined,
-        areas: areas.length > 0 ? areas.map(a => ({
-          name: a.name,
-          ceilingHeight: a.ceilingHeight,
-          dailyUsage: a.dailyUsage,
-          areaSqFt: a.areaSqFt,
-          application: a.application,
-          voltage: a.voltage,
-          installationSurface: a.installationSurface,
-          controlType: a.controlType,
-          ingressProtection: a.ingressProtection,
-          notes: a.notes,
-          luminaires: a.luminaires.map(l => ({
-            description: l.luminaireDescription,
-            fixture: l.fixture,
-            lamp: l.lamp,
-            powerSupply: l.powerSupply,
-            control: l.control,
-            accessories: l.accessories,
-          })),
-        })) : undefined,
+        areas: areas.length > 0 ? areas : undefined,
       });
       navigate(`/projects/${projectId}`);
     } catch {
@@ -709,6 +753,14 @@ export default function CreateProject() {
         {/* LUMINAIRES TAB */}
         {/* ============================================================ */}
         <TabsContent value="luminaires" className="mt-6 space-y-4">
+          <input
+            ref={areaImageInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={handleAreaImageUpload}
+          />
+
           {/* Area filter + Add button */}
           <div className="flex items-center justify-between border-b border-border pb-4">
             <div className="flex items-center gap-3">
@@ -720,13 +772,13 @@ export default function CreateProject() {
                 <SelectContent>
                   <SelectItem value="all">All Areas</SelectItem>
                   {areas.map((a, i) => (
-                    <SelectItem key={i} value={String(i)}>{a.name || `Area ${i + 1}`}</SelectItem>
+                    <SelectItem key={i} value={String(i)}>{a.title || `Area ${i + 1}`}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <Button type="button" onClick={addArea} className="bg-[#7BA23F] hover:bg-[#6B9235] text-white">
-              <Lightbulb className="h-4 w-4 mr-2" />
+              <Layers className="h-4 w-4 mr-2" />
               Add New Area
             </Button>
           </div>
@@ -751,8 +803,8 @@ export default function CreateProject() {
                     <Trash2 className="h-3 w-3" />
                   </button>
                   <Input
-                    value={area.name}
-                    onChange={e => updateArea(realIdx, { name: e.target.value })}
+                    value={area.title}
+                    onChange={e => updateArea(realIdx, { title: e.target.value })}
                     placeholder="Area Title"
                     className="bg-transparent border-none text-white placeholder:text-white/60 text-lg font-semibold focus-visible:ring-0 p-0 h-auto"
                   />
@@ -762,7 +814,19 @@ export default function CreateProject() {
                       size="sm"
                       variant="outline"
                       className="bg-yellow-200 text-foreground hover:bg-yellow-300"
-                      onClick={() => { addLuminaire(realIdx); openLumModal(realIdx, area.luminaires.length); }}
+                      onClick={() => {
+                        const newIndex = area.luminaires.length;
+                        setAreas(prev => prev.map((a, ai) => ai !== realIdx ? a : {
+                          ...a,
+                          luminaires: [...a.luminaires, createEmptyFlatLuminaire()],
+                        }));
+                        setCollapsedAreas(prev => {
+                          const next = new Set(prev);
+                          next.delete(realIdx);
+                          return next;
+                        });
+                        openLumModal(realIdx, newIndex, 'Fixture');
+                      }}
                     >
                       <Lightbulb className="h-4 w-4 mr-1" />
                       Add Luminaire
@@ -772,26 +836,41 @@ export default function CreateProject() {
                       size="sm"
                       variant="outline"
                       className="bg-[#3B4A6B] text-white border-white hover:bg-[#4B5A7B]"
-                      onClick={() => updateArea(realIdx, { detailsOpen: !area.detailsOpen })}
+                      onClick={() => toggleArea(realIdx)}
                     >
                       Area Details
-                      {area.detailsOpen ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                      {!collapsedAreas.has(realIdx) ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
                     </Button>
                   </div>
                 </div>
 
                 {/* Area details */}
-                {area.detailsOpen && (
+                {!collapsedAreas.has(realIdx) && (
                   <div className="p-4 space-y-4">
                     <div className="flex gap-6">
-                      {/* Photo placeholder */}
+                      {/* Photo */}
                       <div className="flex-shrink-0 space-y-2">
-                        <Button type="button" size="sm" className="bg-[#7BA23F] hover:bg-[#6B9235] text-white text-xs">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-[#7BA23F] hover:bg-[#6B9235] text-white text-xs"
+                          onClick={() => {
+                            setActiveAreaImageIndex(realIdx);
+                            areaImageInputRef.current?.click();
+                          }}
+                          disabled={isUploadingAreaImage && activeAreaImageIndex === realIdx}
+                        >
                           <Image className="h-3 w-3 mr-1" />
-                          Upload Photo
+                          {isUploadingAreaImage && activeAreaImageIndex === realIdx ? 'Uploading...' : 'Upload Photo'}
                         </Button>
-                        <div className="w-48 h-36 border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted/30">
-                          <Image className="h-10 w-10 text-muted-foreground/40" />
+                        <div className="w-48 h-36 border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted/30 overflow-hidden">
+                          {isUploadingAreaImage && activeAreaImageIndex === realIdx ? (
+                            <div className="animate-spin h-8 w-8 border-2 border-[#7BA23F] border-t-transparent rounded-full" />
+                          ) : area.image ? (
+                            <img src={area.image} alt="Area" className="w-full h-full object-cover" />
+                          ) : (
+                            <Image className="h-10 w-10 text-muted-foreground/40" />
+                          )}
                         </div>
                       </div>
 
@@ -800,15 +879,15 @@ export default function CreateProject() {
                         <div className="grid grid-cols-4 gap-4">
                           <div>
                             <Label className="text-[#5B6FAF] font-semibold text-sm">Ceiling Height (feet):</Label>
-                            <Input value={area.ceilingHeight} onChange={e => updateArea(realIdx, { ceilingHeight: e.target.value })} />
+                            <Input value={area.ceiling_height} onChange={e => updateArea(realIdx, { ceiling_height: e.target.value })} />
                           </div>
                           <div>
                             <Label className="text-[#5B6FAF] font-semibold text-sm">Daily Usage (hours):</Label>
-                            <Input value={area.dailyUsage} onChange={e => updateArea(realIdx, { dailyUsage: e.target.value })} />
+                            <Input value={area.daily_usage} onChange={e => updateArea(realIdx, { daily_usage: e.target.value })} />
                           </div>
                           <div>
                             <Label className="text-[#5B6FAF] font-semibold text-sm">Area (sq.ft.):</Label>
-                            <Input value={area.areaSqFt} onChange={e => updateArea(realIdx, { areaSqFt: e.target.value })} />
+                            <Input value={area.area_sqft} onChange={e => updateArea(realIdx, { area_sqft: e.target.value })} />
                           </div>
                           <div>
                             <Label className="text-[#5B6FAF] font-semibold text-sm">Application:</Label>
@@ -832,16 +911,16 @@ export default function CreateProject() {
                           </div>
                           <div>
                             <Label className="text-[#5B6FAF] font-semibold text-sm">Installation Surface:</Label>
-                            <Select value={area.installationSurface} onValueChange={v => updateArea(realIdx, { installationSurface: v })}>
+                            <Select value={area.installation_surface} onValueChange={v => updateArea(realIdx, { installation_surface: v })}>
                               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
-                                {['Wood', 'Drywall', 'Concrete', 'Metal', 'Stone'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                                {['Wood', 'Drywall', 'Metal', 'Concrete', 'Stone'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
                           <div>
                             <Label className="text-[#5B6FAF] font-semibold text-sm">Control Type:</Label>
-                            <Select value={area.controlType} onValueChange={v => updateArea(realIdx, { controlType: v })}>
+                            <Select value={area.control_type} onValueChange={v => updateArea(realIdx, { control_type: v })}>
                               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
                                 {['Wall Switch', 'Timer', 'Photocell', 'Occupancy'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
@@ -850,7 +929,7 @@ export default function CreateProject() {
                           </div>
                           <div>
                             <Label className="text-[#5B6FAF] font-semibold text-sm">Ingress Protection:</Label>
-                            <Select value={area.ingressProtection} onValueChange={v => updateArea(realIdx, { ingressProtection: v })}>
+                            <Select value={area.ingress_protection} onValueChange={v => updateArea(realIdx, { ingress_protection: v })}>
                               <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
                                 {['IP 54', 'IP 55', 'IP 65', 'IP 66', 'IP 67', 'IP 68'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
@@ -865,24 +944,18 @@ export default function CreateProject() {
                       </div>
                     </div>
 
-                    {/* Luminaires list */}
-                    {area.luminaires.length > 0 && (
-                      <div className="border-t border-border pt-4 space-y-2">
-                        <Label className="text-sm font-medium text-muted-foreground">Luminaires</Label>
-                        {area.luminaires.map((lum, lumIdx) => (
-                          <div key={lumIdx} className="flex items-center gap-3 p-2 bg-muted/30 rounded-md">
-                            <Lightbulb className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm flex-1">{lum.luminaireDescription || `Luminaire ${lumIdx + 1}`}</span>
-                            <Button type="button" variant="outline" size="sm" onClick={() => openLumModal(realIdx, lumIdx)}>
-                              Edit
-                            </Button>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => removeLuminaire(realIdx, lumIdx)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {/* Luminaires */}
+                    <div className="border-t border-border pt-4">
+                      <LuminairesSubForm
+                        luminaires={area.luminaires}
+                        onEditComponent={(lumIndex, componentLabel) => openLumModal(realIdx, lumIndex, componentLabel)}
+                        onOpenRecent={(lumIndex) => {
+                          recentModalLum.current = { areaIndex: realIdx, lumIndex };
+                          setRecentModalOpen(true);
+                        }}
+                        onRemove={(lumIndex) => removeLuminaire(realIdx, lumIndex)}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -939,13 +1012,19 @@ export default function CreateProject() {
       {/* ============================================================ */}
       {/* LUMINAIRE DETAIL MODAL */}
       {/* ============================================================ */}
+      <RecentLuminairesModal
+        open={recentModalOpen}
+        onClose={() => setRecentModalOpen(false)}
+        areas={recentAreas}
+        onApply={handleRecentApply}
+      />
       <LuminaireModal
         open={lumModalOpen}
         onClose={() => setLumModalOpen(false)}
-        tab={lumModalTab}
-        setTab={setLumModalTab}
-        luminaire={areas[editingAreaIdx]?.luminaires[editingLumIdx]}
-        onChange={(patch) => updateLuminaire(editingAreaIdx, editingLumIdx, patch)}
+        tab={lumTab}
+        setTab={setLumTab}
+        luminaire={lumData ?? undefined}
+        onChange={handleLumModalChange}
       />
 
       {/* ============================================================ */}
@@ -1052,487 +1131,130 @@ export default function CreateProject() {
 }
 
 // ================================================================
-// LUMINAIRE MODAL
+// LUMINAIRES SUB-FORM
 // ================================================================
 
-const COMPONENT_TABS = ['fixture', 'lamp', 'powerSupply', 'control', 'accessories'] as const;
-type ComponentTab = typeof COMPONENT_TABS[number];
+const LUM_COMPONENTS = [
+  { label: 'Fixture',      qtyField: 'qty',                      descField: 'fixtureDescription' },
+  { label: 'Lamp',         qtyField: 'lampPerFixture',           descField: 'lampDescription' },
+  { label: 'Power Supply', qtyField: 'powerQTYFixture',          descField: 'powerSupplyDescription' },
+  { label: 'Control',      qtyField: 'controlQTYFixture',        descField: 'controlDescription' },
+  { label: 'Accessory',    qtyField: 'accessoryDescriptionAQty', descField: 'accessoryDescriptionA' },
+] as const;
 
-const TAB_LABELS: Record<ComponentTab, string> = {
-  fixture: 'Fixture',
-  lamp: 'Lamp',
-  powerSupply: 'Power Supply',
-  control: 'Control',
-  accessories: 'Accessories',
+const COMP_TAB_MAP: Record<string, ComponentTab> = {
+  Fixture: 'fixture',
+  Lamp: 'lamp',
+  'Power Supply': 'powerSupply',
+  Control: 'control',
+  Accessory: 'accessories',
 };
 
-function LuminaireModal({
-  open, onClose, tab, setTab, luminaire, onChange,
+function buildSummary(vals: FlatLuminaire): string {
+  return buildLuminaireSummary(vals) || vals.name || '—';
+}
+
+function LuminairesSubForm({
+  luminaires, onEditComponent, onOpenRecent, onRemove,
 }: {
-  open: boolean;
-  onClose: () => void;
-  tab: ComponentTab;
-  setTab: (t: ComponentTab) => void;
-  luminaire: Luminaire | undefined;
-  onChange: (patch: Partial<Luminaire>) => void;
+  luminaires: FlatLuminaire[];
+  onEditComponent: (lumIndex: number, componentLabel: string) => void;
+  onOpenRecent: (lumIndex: number) => void;
+  onRemove: (lumIndex: number) => void;
 }) {
-  if (!luminaire) return null;
-
-  const currentIdx = COMPONENT_TABS.indexOf(tab);
-  const prevTab = COMPONENT_TABS[(currentIdx - 1 + COMPONENT_TABS.length) % COMPONENT_TABS.length];
-  const nextTab = COMPONENT_TABS[(currentIdx + 1) % COMPONENT_TABS.length];
+  const [openLuminaires, setOpenLuminaires] = useState<Set<number>>(new Set());
+  const toggleLum = (i: number) =>
+    setOpenLuminaires((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
 
   return (
-    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto p-0">
-        {/* Header */}
-        <DialogHeader className="bg-[#C8A84D] px-6 py-4 rounded-t-lg">
-          <DialogTitle className="text-white text-lg">
-            Luminaire Details - {TAB_LABELS[tab]}
-          </DialogTitle>
-        </DialogHeader>
+    <div className="grid grid-cols-2 gap-4">
+      {luminaires.map((lum, lumIndex) => {
+        const isOpen = openLuminaires.has(lumIndex);
+        const summary = buildSummary(lum);
+        const qty = lum.qty || (lum.quantity ? String(lum.quantity) : '');
 
-        <div className="px-6 py-4 space-y-6">
-          {/* Luminaire Description + Navigation */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <Label className="text-[#5B6FAF] font-semibold text-sm">Luminaire Description</Label>
-              <Textarea
-                value={luminaire.luminaireDescription}
-                readOnly
-                onMouseDown={e => e.preventDefault()}
-                rows={1}
-                className="bg-muted/50 cursor-default resize-none overflow-hidden min-h-0"
-                style={{ fieldSizing: 'content' } as never}
-                tabIndex={-1}
-              />
+        return (
+          <div key={lumIndex} className="mb-4">
+            {/* Column labels - outside the box */}
+            <div className="flex gap-2 text-xs font-bold text-muted-foreground uppercase pb-1 px-1">
+              <span className="w-14 shrink-0">QTY</span>
+              <span className="flex-1">Luminaire Description</span>
             </div>
-            <div className="text-right space-y-1">
-              <span className="text-xs text-muted-foreground block">Navigate Components</span>
-              <div className="flex gap-1">
-                <Button size="sm" className="bg-[#3B4A6B] hover:bg-[#4B5A7B] text-white text-xs" onClick={() => setTab(prevTab)}>
-                  &lsaquo; {TAB_LABELS[prevTab]}
-                </Button>
-                <Button size="sm" className="bg-[#3B4A6B] hover:bg-[#4B5A7B] text-white text-xs" onClick={() => setTab(nextTab)}>
-                  {TAB_LABELS[nextTab]} &rsaquo;
-                </Button>
-              </div>
-            </div>
-          </div>
 
-          {/* TAB CONTENT */}
-          {tab === 'fixture' && <FixtureTab fixture={luminaire.fixture} onChange={f => {
-            const newFixture = { ...luminaire.fixture, ...f };
-            const description = buildFixtureSection(newFixture);
-            const updated = { ...newFixture, description };
-            onChange({ fixture: updated, luminaireDescription: buildLuminaireDescription({ ...luminaire, fixture: updated }) });
-          }} />}
-          {tab === 'lamp' && <LampTab lamp={luminaire.lamp} onChange={l => {
-            const newLamp = { ...luminaire.lamp, ...l };
-            const description = buildLampSection(newLamp);
-            const updated = { ...newLamp, description };
-            onChange({ lamp: updated, luminaireDescription: buildLuminaireDescription({ ...luminaire, lamp: updated }) });
-          }} />}
-          {tab === 'powerSupply' && <PowerSupplyTab ps={luminaire.powerSupply} onChange={p => {
-            const newPs = { ...luminaire.powerSupply, ...p };
-            const description = buildPowerSupplySection(newPs);
-            const updated = { ...newPs, description };
-            onChange({ powerSupply: updated, luminaireDescription: buildLuminaireDescription({ ...luminaire, powerSupply: updated }) });
-          }} />}
-          {tab === 'control' && <ControlTab ctrl={luminaire.control} onChange={c => {
-            const newCtrl = { ...luminaire.control, ...c };
-            const description = buildControlSection(newCtrl);
-            const updated = { ...newCtrl, description };
-            onChange({ control: updated, luminaireDescription: buildLuminaireDescription({ ...luminaire, control: updated }) });
-          }} />}
-          {tab === 'accessories' && <AccessoriesTab accessories={luminaire.accessories} onChange={a => {
-            onChange({ accessories: a, luminaireDescription: buildLuminaireDescription({ ...luminaire, accessories: a }) });
-          }} />}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ---------- Section Header ----------
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <div className="flex items-center gap-2 my-4">
-      <div className="flex-1 border-t border-border" />
-      <span className="text-xs font-semibold text-muted-foreground tracking-wider uppercase">{title}</span>
-      <div className="flex-1 border-t border-border" />
-    </div>
-  );
-}
-
-// ---------- Fixture Tab ----------
-function FixtureTab({ fixture, onChange }: { fixture: LuminaireFixture; onChange: (p: Partial<LuminaireFixture>) => void }) {
-  return (
-    <>
-      <SectionHeader title="Fixture Details" />
-      <div className="grid grid-cols-3 gap-4">
-        <div>
-          <Label className="text-xs">QTY</Label>
-          <Input value={fixture.qty} onChange={e => onChange({ qty: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-xs">Mount Height (ft)</Label>
-          <Input value={fixture.mountHeight} onChange={e => onChange({ mountHeight: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-xs">Fixture Description</Label>
-          <Input value={buildFixtureSection(fixture)} readOnly onMouseDown={e => e.preventDefault()} className="bg-muted/50 cursor-default" />
-        </div>
-      </div>
-
-      <SectionHeader title="Filters" />
-      <div className="grid grid-cols-4 gap-4">
-        {(['application', 'mount', 'style', 'lens'] as const).map(field => (
-          <div key={field}>
-            <Label className="text-[#5B6FAF] font-semibold text-xs capitalize">{field}:</Label>
-            <Select value={fixture[field]} onValueChange={v => onChange({ [field]: v })}>
-              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="option1">Option 1</SelectItem>
-                <SelectItem value="option2">Option 2</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-4 gap-4">
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Length (in):</Label>
-          <Input value={fixture.dimLength} onChange={e => onChange({ dimLength: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Width (in):</Label>
-          <Input value={fixture.dimWidth} onChange={e => onChange({ dimWidth: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Depth (in):</Label>
-          <Input value={fixture.dimDepth} onChange={e => onChange({ dimDepth: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Diameter (in):</Label>
-          <Input value={fixture.dimDiameter} onChange={e => onChange({ dimDiameter: e.target.value })} />
-        </div>
-      </div>
-
-      <div className="w-40">
-        <Label className="text-[#5B6FAF] font-semibold text-xs">Price Per Unit ($):</Label>
-        <Input value={fixture.pricePerUnit} onChange={e => onChange({ pricePerUnit: e.target.value })} />
-      </div>
-    </>
-  );
-}
-
-// ---------- Lamp Tab ----------
-function LampTab({ lamp, onChange }: { lamp: LuminaireLamp; onChange: (p: Partial<LuminaireLamp>) => void }) {
-  return (
-    <>
-      <SectionHeader title="Lamp Details" />
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label className="text-xs">QTY/Fixture</Label>
-          <Input value={lamp.qtyPerFixture} onChange={e => onChange({ qtyPerFixture: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-xs">Lamp Description</Label>
-          <Input value={buildLampSection(lamp)} readOnly onMouseDown={e => e.preventDefault()} className="bg-muted/50 cursor-default" />
-        </div>
-      </div>
-
-      <SectionHeader title="Filters" />
-      <div className="grid grid-cols-4 gap-4">
-        {(['category', 'type', 'baseCategory', 'baseCategoryType'] as const).map(field => (
-          <div key={field}>
-            <Label className="text-[#5B6FAF] font-semibold text-xs capitalize">{field.replace(/([A-Z])/g, ' $1').trim()}:</Label>
-            <Select value={lamp[field]} onValueChange={v => onChange({ [field]: v })}>
-              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="option1">Option 1</SelectItem>
-                <SelectItem value="option2">Option 2</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-4 gap-4">
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Wattage:</Label>
-          <Input value={lamp.wattage} onChange={e => onChange({ wattage: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Color Temperature:</Label>
-          <Input value={lamp.colorTemp} onChange={e => onChange({ colorTemp: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Lens Type:</Label>
-          <Select value={lamp.lensType} onValueChange={v => onChange({ lensType: v })}>
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="clear">Clear</SelectItem>
-              <SelectItem value="frosted">Frosted</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Product Code:</Label>
-          <Input value={lamp.productCode} onChange={e => onChange({ productCode: e.target.value })} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 w-80">
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Price Per Unit ($):</Label>
-          <Input value={lamp.pricePerUnit} onChange={e => onChange({ pricePerUnit: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">LED:</Label>
-          <Select value={lamp.led} onValueChange={v => onChange({ led: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="No">No</SelectItem>
-              <SelectItem value="Yes">Yes</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ---------- Power Supply Tab ----------
-function PowerSupplyTab({ ps, onChange }: { ps: LuminairePowerSupply; onChange: (p: Partial<LuminairePowerSupply>) => void }) {
-  return (
-    <>
-      <SectionHeader title="Power Supply Details" />
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label className="text-xs">QTY/Fixture</Label>
-          <Input value={ps.qtyPerFixture} onChange={e => onChange({ qtyPerFixture: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-xs">Power Supply Description</Label>
-          <Input value={buildPowerSupplySection(ps)} readOnly onMouseDown={e => e.preventDefault()} className="bg-muted/50 cursor-default" />
-        </div>
-      </div>
-
-      <SectionHeader title="Filters" />
-      <div className="grid grid-cols-4 gap-4">
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Type:</Label>
-          <Select value={ps.type} onValueChange={v => onChange({ type: v })}>
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="driver">Driver</SelectItem>
-              <SelectItem value="transformer">Transformer</SelectItem>
-              <SelectItem value="ballast">Ballast</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Manufacturer:</Label>
-          <Input value={ps.manufacturer} onChange={e => onChange({ manufacturer: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Model:</Label>
-          <Input value={ps.model} onChange={e => onChange({ model: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Product Code:</Label>
-          <Input value={ps.productCode} onChange={e => onChange({ productCode: e.target.value })} />
-        </div>
-      </div>
-
-      <div className="w-40">
-        <Label className="text-[#5B6FAF] font-semibold text-xs">Price Per Unit ($):</Label>
-        <Input value={ps.pricePerUnit} onChange={e => onChange({ pricePerUnit: e.target.value })} />
-      </div>
-    </>
-  );
-}
-
-// ---------- Control Tab ----------
-function ControlTab({ ctrl, onChange }: { ctrl: LuminaireControl; onChange: (p: Partial<LuminaireControl>) => void }) {
-  return (
-    <>
-      <SectionHeader title="Control Details" />
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label className="text-xs">QTY/Fixture</Label>
-          <Input value={ctrl.qtyPerFixture} onChange={e => onChange({ qtyPerFixture: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-xs">Control Description:</Label>
-          <Input value={buildControlSection(ctrl)} readOnly onMouseDown={e => e.preventDefault()} className="bg-muted/50 cursor-default" />
-        </div>
-      </div>
-
-      <SectionHeader title="Filters" />
-      <div className="grid grid-cols-4 gap-4">
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Type:</Label>
-          <Select value={ctrl.type} onValueChange={v => onChange({ type: v })}>
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="switch">Switch</SelectItem>
-              <SelectItem value="dimmer">Dimmer</SelectItem>
-              <SelectItem value="sensor">Sensor</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Manufacturer:</Label>
-          <Input value={ctrl.manufacturer} onChange={e => onChange({ manufacturer: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Dimming:</Label>
-          <Input value={ctrl.dimming} onChange={e => onChange({ dimming: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Model:</Label>
-          <Input value={ctrl.model} onChange={e => onChange({ model: e.target.value })} />
-        </div>
-      </div>
-
-      <div className="w-40">
-        <Label className="text-[#5B6FAF] font-semibold text-xs">Price Per Unit ($):</Label>
-        <Input value={ctrl.pricePerUnit} onChange={e => onChange({ pricePerUnit: e.target.value })} />
-      </div>
-    </>
-  );
-}
-
-// ---------- Accessories Tab ----------
-function AccessoriesTab({ accessories, onChange }: { accessories: LuminaireAccessory[]; onChange: (a: LuminaireAccessory[]) => void }) {
-  const [activeIdx, setActiveIdx] = useState(0);
-
-  const updateAccessory = (idx: number, patch: Partial<LuminaireAccessory>) => {
-    onChange(accessories.map((a, i) => i === idx ? { ...a, ...patch } : a));
-  };
-
-  const addAccessory = () => {
-    const newIdx = accessories.length;
-    onChange([...accessories, { selected: true, qtyPerFixture: '', description: '', type: '', manufacturer: '', color: '', productCode: '', dimLength: '', dimWidth: '', dimDepth: '', dimDiameter: '', pricePerUnit: '' }]);
-    setActiveIdx(newIdx);
-  };
-
-  const removeAccessory = (idx: number) => {
-    if (accessories.length <= 1) return;
-    const next = accessories.filter((_, i) => i !== idx);
-    onChange(next);
-    setActiveIdx(Math.min(activeIdx, next.length - 1));
-  };
-
-  const safeIdx = Math.min(activeIdx, accessories.length - 1);
-  const current = accessories[safeIdx];
-  if (!current) return null;
-
-  return (
-    <>
-      <SectionHeader title="Accessories Details" />
-      <div className="space-y-2">
-        {accessories.map((acc, i) => (
-          <div
-            key={i}
-            className={`flex items-center gap-3 rounded-md border px-3 py-2 cursor-pointer transition-colors ${i === safeIdx ? 'border-[#3B4A6B] bg-[#3B4A6B]/5' : 'border-border bg-background hover:bg-muted/40'}`}
-            onClick={() => setActiveIdx(i)}
-          >
-            <span
-              className={`w-7 h-7 flex items-center justify-center rounded text-xs font-bold shrink-0 ${i === safeIdx ? 'bg-[#3B4A6B] text-white' : 'bg-muted text-muted-foreground'}`}
-            >
-              {String.fromCharCode(65 + i)}
-            </span>
-            <div className="shrink-0" onClick={e => e.stopPropagation()}>
-              <Label className="text-xs block mb-0.5">QTY/Fixture</Label>
-              <Input
-                value={acc.qtyPerFixture}
-                onChange={e => updateAccessory(i, { qtyPerFixture: e.target.value })}
-                className="w-20 h-7 text-xs"
-              />
-            </div>
-            <div className="flex-1" onClick={e => e.stopPropagation()}>
-              <Label className="text-xs block mb-0.5">Accessory Description</Label>
-              <Input
-                value={buildAccessorySection(acc)}
-                readOnly
-                onMouseDown={e => e.preventDefault()}
-                className="bg-muted/50 cursor-default h-7 text-xs"
-              />
-            </div>
-            {accessories.length > 1 && (
+            {/* Box wrapper - trash button anchored here */}
+            <div className="relative">
               <button
                 type="button"
-                onClick={e => { e.stopPropagation(); removeAccessory(i); }}
-                className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                className="absolute -left-3 -top-2 w-5 h-5 bg-red-500 text-white rounded-sm flex items-center justify-center z-10"
+                onClick={() => onRemove(lumIndex)}
               >
-                <X className="h-4 w-4" />
+                <Trash2 className="h-3 w-3" />
               </button>
-            )}
+
+              {/* Summary row */}
+              <div
+                className="flex items-center gap-2 px-3 py-2 bg-muted/30 hover:bg-muted/50 border border-border cursor-pointer transition-colors mt-4"
+                onClick={() => toggleLum(lumIndex)}
+              >
+                <span className="w-14 shrink-0 text-sm font-medium">{qty}</span>
+                <span className="flex-1 text-sm leading-snug break-words min-w-0">{summary}</span>
+                {isOpen
+                  ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+                  : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+              </div>
+
+              {/* Accordion - component breakdown */}
+              {isOpen && (
+                <div className="border border-t-0 border-border bg-muted/30 px-4 py-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="grid grid-cols-[110px_1fr_60px] gap-2 flex-1 text-xs font-bold text-muted-foreground uppercase">
+                      <span>Component</span>
+                      <span>Description</span>
+                      <span />
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="shrink-0 bg-sky-600 hover:bg-sky-700 text-white text-xs h-7 px-2 ml-2"
+                      onClick={() => onOpenRecent(lumIndex)}
+                    >
+                      <Clock className="h-3 w-3 mr-1" />
+                      Recent Luminaires
+                    </Button>
+                  </div>
+
+                  {LUM_COMPONENTS.map(({ label, descField }) => (
+                    <div key={label} className="grid grid-cols-[110px_1fr_60px] gap-2 text-sm py-1 items-start">
+                      <span className="text-muted-foreground text-xs pt-1">{label}</span>
+                      <div className="min-h-7 text-xs px-2 py-1 border border-border rounded bg-background break-words leading-snug">
+                        {lum[descField] ?? ''}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 text-xs px-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900"
+                        onClick={() => onEditComponent(lumIndex, label)}
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1" />Edit
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        ))}
-      </div>
+        );
+      })}
 
-      <Button type="button" size="sm" className="bg-[#3B4A6B] hover:bg-[#4B5A7B] text-white" onClick={addAccessory}>
-        <Plus className="h-3 w-3 mr-1" />
-        New Accessory
-      </Button>
-
-      <SectionHeader title="Filters" />
-      <div className="grid grid-cols-4 gap-4">
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Type:</Label>
-          <Select value={current.type} onValueChange={v => updateAccessory(safeIdx, { type: v })}>
-            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="bracket">Bracket</SelectItem>
-              <SelectItem value="reflector">Reflector</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Manufacturer:</Label>
-          <Input value={current.manufacturer} onChange={e => updateAccessory(safeIdx, { manufacturer: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Color:</Label>
-          <Input value={current.color} onChange={e => updateAccessory(safeIdx, { color: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Product Code:</Label>
-          <Input value={current.productCode} onChange={e => updateAccessory(safeIdx, { productCode: e.target.value })} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-4">
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Length (in):</Label>
-          <Input value={current.dimLength} onChange={e => updateAccessory(safeIdx, { dimLength: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Width (in):</Label>
-          <Input value={current.dimWidth} onChange={e => updateAccessory(safeIdx, { dimWidth: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Depth (in):</Label>
-          <Input value={current.dimDepth} onChange={e => updateAccessory(safeIdx, { dimDepth: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-[#5B6FAF] font-semibold text-xs">Dimensions-Diameter (in):</Label>
-          <Input value={current.dimDiameter} onChange={e => updateAccessory(safeIdx, { dimDiameter: e.target.value })} />
-        </div>
-      </div>
-
-      <div className="w-40">
-        <Label className="text-[#5B6FAF] font-semibold text-xs">Price Per Unit ($):</Label>
-        <Input value={current.pricePerUnit} onChange={e => updateAccessory(safeIdx, { pricePerUnit: e.target.value })} />
-      </div>
-    </>
+      {luminaires.length === 0 && (
+        <p className="col-span-2 text-xs text-muted-foreground py-2">No luminaires. Use the &quot;Add Luminaire&quot; button above.</p>
+      )}
+    </div>
   );
 }
 
