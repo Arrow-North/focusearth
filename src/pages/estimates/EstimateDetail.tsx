@@ -183,7 +183,7 @@ export default function EstimateDetail() {
   }
 
   const est = estimate;
-  console.log('est', est)
+  
   const currentStage = orderPath.current_stage;
   const effectiveTab = activeTab ?? currentStage ?? 'estimate';
   const basePath = isSU ? '/orders/suppliers' : '/orders/real-estate';
