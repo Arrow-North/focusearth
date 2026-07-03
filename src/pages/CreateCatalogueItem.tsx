@@ -40,10 +40,10 @@ const INITIAL_DETAILS: ProductDetails = {
   productType: "",
   manufacturer: "",
   orderCode: "",
-  length: "",
-  width: "",
-  diameter: "",
-  depth: "",
+  dimensionsLength: "",
+  dimensionsWidth: "",
+  dimensionsDiameter: "",
+  dimensionsDepth: "",
   wattage: "",
   lumens: "",
   cct: "",
@@ -51,19 +51,19 @@ const INITIAL_DETAILS: ProductDetails = {
   beamAngle: "",
   optics: "",
   thd: "",
-  voltageMin: "",
-  voltageMax: "",
+  vMin: "",
+  vMax: "",
   pricePerUnit: "",
-  warranty: "",
-  l70Lifetime: "",
+  fixtureWarranty: "",
+  lifetime: "",
   dimmability: "",
   colorTunable: "",
   powerFactor: "",
-  cbcp: "",
+  cBCP: "",
   application: "",
-  style: "",
+  fixtureStyle: "",
   mount: "",
-  shape: "",
+  fixtureShape: "",
   lensType: "",
   ingressProtection: "",
   fixtureColor: "",
@@ -71,21 +71,25 @@ const INITIAL_DETAILS: ProductDetails = {
   certifications: "",
   buyAmerica: "",
   installationTime: "",
-  deliveryDays: "",
-  volumeTier1Qty: "",
+  approxDeliveryDays: "",
+  volumeTier1MinQty: "",
   volumeTier1PPU: "",
-  volumeTier2Qty: "",
+  volumeTier2MinQty: "",
   volumeTier2PPU: "",
-  supplierDescription: "",
-  productSpecifications: "",
-  installationInstructions: "",
-  productImage: "",
-  compatibleOrderCodes: "",
+  supplierProductDescription: "",
+  productSpecificationsHyperlink: "",
+  installationInstructionsHyperlink: "",
+  productImageHyperlink: "",
+  compatibleProductOrderCodes: "",
   notes: "",
 };
 
+type StringKey = {
+  [K in keyof ProductDetails]: NonNullable<ProductDetails[K]> extends string | string[] ? K : never;
+}[keyof ProductDetails];
+
 type FieldDef = {
-  key: keyof ProductDetails;
+  key: StringKey;
   label: string;
   type?: "select";
   options?: string[];
@@ -93,56 +97,56 @@ type FieldDef = {
 
 // Column 1: Dimensions + physical attributes
 const COL_1_FIELDS: FieldDef[] = [
-  { key: "length", label: "Dimensions - Length (in):" },
-  { key: "width", label: "Dimensions - Width (in):" },
-  { key: "diameter", label: "Dimensions - Diameter (in):" },
-  { key: "depth", label: "Dimensions - Depth (in):" },
-  { key: "application", label: "Application:", type: "select", options: APPLICATION_OPTIONS },
-  { key: "style", label: "Style:" },
-  { key: "mount", label: "Mount:" },
-  { key: "shape", label: "Shape:" },
-  { key: "lensType", label: "Lens Type:" },
-  { key: "ingressProtection", label: "Ingress Protection:" },
-  { key: "fixtureColor", label: "Fixture Color:" },
-  { key: "trim", label: "Trim:" },
+  { key: "dimensionsLength",   label: "Dimensions - Length (in):" },
+  { key: "dimensionsWidth",    label: "Dimensions - Width (in):" },
+  { key: "dimensionsDiameter", label: "Dimensions - Diameter (in):" },
+  { key: "dimensionsDepth",    label: "Dimensions - Depth (in):" },
+  { key: "application",        label: "Application:", type: "select", options: APPLICATION_OPTIONS },
+  { key: "fixtureStyle",       label: "Style:" },
+  { key: "mount",              label: "Mount:" },
+  { key: "fixtureShape",       label: "Shape:" },
+  { key: "lensType",           label: "Lens Type:" },
+  { key: "ingressProtection",  label: "Ingress Protection:" },
+  { key: "fixtureColor",       label: "Fixture Color:" },
+  { key: "trim",               label: "Trim:" },
 ];
 
 // Column 2: Electrical & performance
 const COL_2_FIELDS: FieldDef[] = [
-  { key: "wattage", label: "Wattage:" },
-  { key: "lumens", label: "Lumens:" },
-  { key: "cct", label: "CCT (K°):", type: "select", options: CCT_OPTIONS },
-  { key: "cri", label: "CRI:" },
-  { key: "l70Lifetime", label: "L70 Lifetime (hours):" },
-  { key: "warranty", label: "Warranty (years):" },
-  { key: "voltageMin", label: "Voltage (min):" },
-  { key: "voltageMax", label: "Voltage (max):" },
-  { key: "dimmability", label: "Dimmability:", type: "select", options: DIMMABILITY_OPTIONS },
-  { key: "colorTunable", label: "Color Tunable:", type: "select", options: COLOR_TUNABLE_OPTIONS },
-  { key: "powerFactor", label: "Power Factor:" },
-  { key: "cbcp", label: "CBCP:" },
+  { key: "wattage",         label: "Wattage:" },
+  { key: "lumens",          label: "Lumens:" },
+  { key: "cct",             label: "CCT (K°):", type: "select", options: CCT_OPTIONS },
+  { key: "cri",             label: "CRI:" },
+  { key: "lifetime",        label: "L70 Lifetime (hours):" },
+  { key: "fixtureWarranty", label: "Warranty (years):" },
+  { key: "vMin",            label: "Voltage (min):" },
+  { key: "vMax",            label: "Voltage (max):" },
+  { key: "dimmability",     label: "Dimmability:", type: "select", options: DIMMABILITY_OPTIONS },
+  { key: "colorTunable",    label: "Color Tunable:", type: "select", options: COLOR_TUNABLE_OPTIONS },
+  { key: "powerFactor",     label: "Power Factor:" },
+  { key: "cBCP",            label: "CBCP:" },
 ];
 
 // Column 3: Compliance, pricing, volume
 const COL_3_FIELDS: FieldDef[] = [
-  { key: "thd", label: "THD (%):" },
-  { key: "beamAngle", label: "Beam Angle:" },
-  { key: "optics", label: "Optics:", type: "select", options: OPTICS_OPTIONS },
-  { key: "certifications", label: "Certifications:", type: "select", options: CERTIFICATIONS_OPTIONS },
-  { key: "buyAmerica", label: "Buy America:", type: "select", options: BUY_AMERICA_OPTIONS },
-  { key: "installationTime", label: "Installation (minutes):" },
-  { key: "deliveryDays", label: "Delivery (days):" },
-  { key: "pricePerUnit", label: "Price Per Unit ($):" },
-  { key: "volumeTier1Qty", label: "Vol. Tier 1 (min qty):" },
-  { key: "volumeTier1PPU", label: "Vol. Tier 1 PPU ($):" },
-  { key: "volumeTier2Qty", label: "Vol. Tier 2 (min qty):" },
-  { key: "volumeTier2PPU", label: "Vol. Tier 2 PPU ($):" },
+  { key: "thd",               label: "THD (%):" },
+  { key: "beamAngle",         label: "Beam Angle:" },
+  { key: "optics",            label: "Optics:", type: "select", options: OPTICS_OPTIONS },
+  { key: "certifications",    label: "Certifications:", type: "select", options: CERTIFICATIONS_OPTIONS },
+  { key: "buyAmerica",        label: "Buy America:", type: "select", options: BUY_AMERICA_OPTIONS },
+  { key: "installationTime",  label: "Installation (minutes):" },
+  { key: "approxDeliveryDays",label: "Delivery (days):" },
+  { key: "pricePerUnit",      label: "Price Per Unit ($):" },
+  { key: "volumeTier1MinQty", label: "Vol. Tier 1 (min qty):" },
+  { key: "volumeTier1PPU",    label: "Vol. Tier 1 PPU ($):" },
+  { key: "volumeTier2MinQty", label: "Vol. Tier 2 (min qty):" },
+  { key: "volumeTier2PPU",    label: "Vol. Tier 2 PPU ($):" },
 ];
 
 export default function CreateCatalogueItem() {
   const { category } = useParams<{ category: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, userType, isAdmin } = useAuth();
   const createProduct = useCreateProduct();
   const catalogueName = getCatalogueName(category);
 
@@ -151,8 +155,13 @@ export default function CreateCatalogueItem() {
     ...INITIAL_DETAILS,
     productType: catalogueName.replace(/s$/, ""),
   });
+  const [isExisting, setIsExisting] = useState(false);
 
-  const update = (key: keyof ProductDetails, value: string) => {
+  // REU → always false, SU → always true, admin → controlled by dropdown
+  const effectiveIsExisting =
+    userType === "Reu" ? false : userType === "Su" ? true : isExisting;
+
+  const update = (key: StringKey, value: string) => {
     setDetails((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -166,6 +175,7 @@ export default function CreateCatalogueItem() {
         airtableRecord: productName,
         airtableColumName: category,
         details,
+        isExisting: effectiveIsExisting,
       },
       {
         onSuccess: (newId) => {
@@ -176,7 +186,7 @@ export default function CreateCatalogueItem() {
   };
 
   const renderField = (f: FieldDef) => {
-    const value = details[f.key] ?? "";
+    const value = (details[f.key] as string) ?? "";
     return (
       <div key={f.key}>
         <Label className="text-primary font-medium text-xs">{f.label}</Label>
@@ -260,7 +270,7 @@ export default function CreateCatalogueItem() {
               <div>
                 <Label className="text-primary font-medium text-xs">Product Description:</Label>
                 <Input
-                  value={details.description}
+                  value={details.description ?? ""}
                   onChange={(e) => update("description", e.target.value)}
                   className="mt-1 h-9 text-sm"
                 />
@@ -268,23 +278,40 @@ export default function CreateCatalogueItem() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-primary font-medium text-xs">Supplier:</Label>
-                  <Input value={details.supplier} onChange={(e) => update("supplier", e.target.value)} className="mt-1 h-9 text-sm" />
+                  <Input value={details.supplier ?? ""} onChange={(e) => update("supplier", e.target.value)} className="mt-1 h-9 text-sm" />
                 </div>
                 <div>
                   <Label className="text-primary font-medium text-xs">Product Type:</Label>
-                  <Input value={details.productType} onChange={(e) => update("productType", e.target.value)} className="mt-1 h-9 text-sm" />
+                  <Input value={details.productType ?? ""} onChange={(e) => update("productType", e.target.value)} className="mt-1 h-9 text-sm" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-primary font-medium text-xs">Manufacturer:</Label>
-                  <Input value={details.manufacturer} onChange={(e) => update("manufacturer", e.target.value)} className="mt-1 h-9 text-sm" />
+                  <Input value={details.manufacturer ?? ""} onChange={(e) => update("manufacturer", e.target.value)} className="mt-1 h-9 text-sm" />
                 </div>
                 <div>
                   <Label className="text-primary font-medium text-xs">Order Code:</Label>
-                  <Input value={details.orderCode} onChange={(e) => update("orderCode", e.target.value)} className="mt-1 h-9 text-sm" />
+                  <Input value={details.orderCode ?? ""} onChange={(e) => update("orderCode", e.target.value)} className="mt-1 h-9 text-sm" />
                 </div>
               </div>
+              {isAdmin && (
+                <div>
+                  <Label className="text-primary font-medium text-xs">Listing Type:</Label>
+                  <Select
+                    value={isExisting ? "existing" : "recommended"}
+                    onValueChange={(v) => setIsExisting(v === "existing")}
+                  >
+                    <SelectTrigger className="mt-1 bg-card h-9 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card z-50">
+                      <SelectItem value="recommended">Recommended</SelectItem>
+                      <SelectItem value="existing">Existing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -308,27 +335,27 @@ export default function CreateCatalogueItem() {
         <div className="bg-card rounded-lg border border-border p-6 space-y-4">
           <div>
             <Label className="text-primary font-medium text-xs">Supplier Product Description:</Label>
-            <Input value={details.supplierDescription} onChange={(e) => update("supplierDescription", e.target.value)} className="mt-1 h-9 text-sm" />
+            <Input value={details.supplierProductDescription ?? ""} onChange={(e) => update("supplierProductDescription", e.target.value)} className="mt-1 h-9 text-sm" />
           </div>
           <div>
             <Label className="text-primary font-medium text-xs">Product Specifications (hyperlink):</Label>
-            <Input value={details.productSpecifications} onChange={(e) => update("productSpecifications", e.target.value)} className="mt-1 h-9 text-sm" />
+            <Input value={details.productSpecificationsHyperlink ?? ""} onChange={(e) => update("productSpecificationsHyperlink", e.target.value)} className="mt-1 h-9 text-sm" />
           </div>
           <div>
             <Label className="text-primary font-medium text-xs">Installation Instructions (hyperlink):</Label>
-            <Input value={details.installationInstructions} onChange={(e) => update("installationInstructions", e.target.value)} className="mt-1 h-9 text-sm" />
+            <Input value={details.installationInstructionsHyperlink ?? ""} onChange={(e) => update("installationInstructionsHyperlink", e.target.value)} className="mt-1 h-9 text-sm" />
           </div>
           <div>
             <Label className="text-primary font-medium text-xs">Product Image (hyperlink):</Label>
-            <Input value={details.productImage} onChange={(e) => update("productImage", e.target.value)} className="mt-1 h-9 text-sm" />
+            <Input value={details.productImageHyperlink ?? ""} onChange={(e) => update("productImageHyperlink", e.target.value)} className="mt-1 h-9 text-sm" />
           </div>
           <div>
             <Label className="text-primary font-medium text-xs">Compatible Product Order Codes:</Label>
-            <Input value={details.compatibleOrderCodes} onChange={(e) => update("compatibleOrderCodes", e.target.value)} className="mt-1 h-9 text-sm" />
+            <Input value={(details.compatibleProductOrderCodes as string) ?? ""} onChange={(e) => update("compatibleProductOrderCodes", e.target.value)} className="mt-1 h-9 text-sm" />
           </div>
           <div>
             <Label className="text-primary font-medium text-xs">Notes:</Label>
-            <Textarea value={details.notes} onChange={(e) => update("notes", e.target.value)} className="mt-1 min-h-[80px] text-sm" />
+            <Textarea value={details.notes ?? ""} onChange={(e) => update("notes", e.target.value)} className="mt-1 min-h-[80px] text-sm" />
           </div>
         </div>
       </form>

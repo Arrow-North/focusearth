@@ -1,4 +1,4 @@
-import { createContext, useCallback, useEffect, useState } from 'react';
+import { createContext, useCallback, useEffect, useRef, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { isAdmin } from '@/lib/roles';
@@ -27,8 +27,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const lastUserIdRef = useRef<string | null>(null);
+
   const fetchProfile = useCallback(async (userId: string) => {
-    const { data, error } = await supabase.rpc('fn_get_user', { p_user_id: userId });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.rpc as any)('fn_get_user', { p_user_id: userId });
     if (error) {
       console.error('Failed to fetch profile:', error);
       return null;
@@ -62,10 +65,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Fetch profile separately — never inside onAuthStateChange to avoid deadlocks.
   // isLoading stays true until this resolves so RoleGuard doesn't redirect prematurely.
+  // Skip re-fetch when it's the same user (token refresh) — avoids a spurious
+  // isLoading=true that would unmount ProtectedRoute's children.
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
+    if (lastUserIdRef.current === user.id) return;
+    lastUserIdRef.current = user.id;
 
+    let cancelled = false;
     setIsLoading(true);
     fetchProfile(user.id).then((p) => {
       if (!cancelled) {

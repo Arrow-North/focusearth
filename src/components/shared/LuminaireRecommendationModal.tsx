@@ -11,41 +11,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Luminaire } from '@/types/database';
+import type { Luminaire, Product } from '@/types/database';
+import { useAuth } from '@/hooks/useAuth';
+import { useProducts } from '@/hooks/use-products';
 
 export interface LuminaireRecommendationModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lum: Luminaire;
   componentLabel: string;
-  onSave?: (label: string, qty: string, changeType: string) => void;
+  /** Explicit supplier company scope. Falls back to the auth user's own company. */
+  companyId?: number | null;
+  onSave?: (label: string, qty: string, product: Product | null) => void;
 }
 
 const COMPONENT_ORDER = ['Accessory', 'Fixture', 'Lamp', 'Power Supply', 'Control'] as const;
 type ComponentLabel = (typeof COMPONENT_ORDER)[number];
 
-interface RecommendedLuminaireOption {
-  id: string;
-  label: string;
-}
-
-const RECOMMENDED_LUMINAIRE_OPTIONS: Partial<Record<ComponentLabel, RecommendedLuminaireOption[]>> = {
-  Fixture: [
-    { id: 'fix-1',  label: '7.50"x3.03" Can Frosted 18W 1260L 2700K 90CRI 14ETA $4.50' },
-    { id: 'fix-2',  label: '7.50"x3.03" Can Frosted 12W 840L 2700K 90CRI 14ETA $4.50' },
-    { id: 'fix-3',  label: '5.7"x2.5" Can Frosted 13W 800L 4000K 90CRI ETA $4.50' },
-    { id: 'fix-4',  label: '5.70"x2.5" Can Frosted 13W 800L 4000K 90CRI 14ETA $4.50' },
-    { id: 'fix-5',  label: '4.72"x0.76" Can Frosted 9W 600L 5000K 80CRI 14ETA $4.50' },
-    { id: 'fix-6',  label: '4.72"x4.72"x0.43" Can Frosted 9W 600L 4000K 80CRI 14ETA $4.50' },
-    { id: 'fix-7',  label: '4.72"x0.76" Can Frosted 9W 600L 4000K 80CRI 14ETA $4.50' },
-    { id: 'fix-8',  label: '6.75"x0.78" Can Frosted 12W 900L 4000K 90CRI 14ETA $6.00' },
-    { id: 'fix-9',  label: '6.75"x0.78" Can Frosted 12W 900L 5000K 80CRI 14ETA $6.00' },
-    { id: 'fix-10', label: '6.77"x6.77"x0.47" Can Frosted 12W 900L 4000K 80CRI 14ETA $6.00' },
-    { id: 'fix-11', label: '6.77"x6.77"x0.47" Can Frosted 12W 900L 3000K 80CRI 14ETA $6.00' },
-    { id: 'fix-12', label: '7.40"x2.9" Can Frosted 13.5W 800L 4000K 90CRI 14ETA $7.80' },
-    { id: 'fix-13', label: '24"x48"x" Troffer Acrylic 34W 3400L 2500K 83CRI 7ETA $75.00' },
-  ],
+const CATEGORY_MAP: Record<ComponentLabel, string> = {
+  Fixture: 'fixtures',
+  Lamp: 'lamp',
+  'Power Supply': 'power-supply',
+  Control: 'control',
+  Accessory: 'accessories',
 };
+
+function getProductLabel(product: Product, label: ComponentLabel): string {
+  const d = product.details;
+  switch (label) {
+    case 'Fixture':      return d.fixtureDescription ?? d.description ?? '';
+    case 'Lamp':         return d.lampDescription ?? d.description ?? '';
+    case 'Power Supply': return d.powerSupplyDescription ?? d.description ?? '';
+    case 'Control':      return d.controlDescription ?? d.description ?? '';
+    case 'Accessory':    return d.accessoryDescriptionA ?? d.description ?? '';
+    default:             return d.description ?? '';
+  }
+}
 
 function SectionDivider({ title }: { title: string }) {
   return (
@@ -95,11 +96,12 @@ export function LuminaireRecommendationModal({
   onOpenChange,
   lum,
   componentLabel,
+  companyId: propCompanyId,
   onSave,
 }: LuminaireRecommendationModalProps) {
   const [currentLabel, setCurrentLabel] = useState<string>(componentLabel);
   const qty = lum.qty ?? '';
-  const [changeType, setChangeType] = useState('No Change');
+  const [selectedProductId, setSelectedProductId] = useState<string>('no-change');
   const [filters, setFilters] = useState({
     wattageMin: '',
     wattageMax: '',
@@ -123,6 +125,22 @@ export function LuminaireRecommendationModal({
     dimensionsDiameter: '',
   });
 
+  const { companyId: authCompanyId } = useAuth();
+  const resolvedCompanyId = propCompanyId !== undefined ? propCompanyId : authCompanyId;
+
+  const { data: productsData } = useProducts({
+    companyId: resolvedCompanyId ?? undefined,
+    isExisting: false,
+    pageSize: 1000,
+  });
+
+  const recommendedOptions = (productsData?.rows ?? []).filter(
+    (p) => p.airtable_colum_name === CATEGORY_MAP[currentLabel as ComponentLabel],
+  );
+  const selectedProduct = selectedProductId === 'no-change'
+    ? null
+    : recommendedOptions.find((p) => String(p.id) === selectedProductId) ?? null;
+
   const currentIndex = COMPONENT_ORDER.indexOf(currentLabel as ComponentLabel);
   const prevLabel = COMPONENT_ORDER[(currentIndex - 1 + COMPONENT_ORDER.length) % COMPONENT_ORDER.length];
   const nextLabel = COMPONENT_ORDER[(currentIndex + 1) % COMPONENT_ORDER.length];
@@ -142,7 +160,7 @@ export function LuminaireRecommendationModal({
     setFilters((prev) => ({ ...prev, [key]: value }));
 
   const handleSave = () => {
-    onSave?.(currentLabel, qty, changeType);
+    onSave?.(currentLabel, qty, selectedProduct);
     onOpenChange(false);
   };
 
@@ -182,7 +200,7 @@ export function LuminaireRecommendationModal({
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => setCurrentLabel(prevLabel)}
+                  onClick={() => { setCurrentLabel(prevLabel); setSelectedProductId('no-change'); }}
                   className="bg-[#2c628d] hover:bg-[#245079] text-white text-xs w-32"
                 >
                   <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
@@ -191,7 +209,7 @@ export function LuminaireRecommendationModal({
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => setCurrentLabel(nextLabel)}
+                  onClick={() => { setCurrentLabel(nextLabel); setSelectedProductId('no-change'); }}
                   className="bg-[#2c628d] hover:bg-[#245079] text-white text-xs w-32"
                 >
                   <span className="flex-1 text-center">{nextLabel}</span>
@@ -216,15 +234,20 @@ export function LuminaireRecommendationModal({
               </div>
             </div>
             <div className="flex-1">
-              <Select value={changeType} onValueChange={setChangeType}>
+              <Select value={selectedProductId} onValueChange={setSelectedProductId}>
                 <SelectTrigger className="bg-gray-100">
-                  <SelectValue />
+                  <SelectValue placeholder="No Change" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="No Change">No Change</SelectItem>
-                  {(RECOMMENDED_LUMINAIRE_OPTIONS[currentLabel as ComponentLabel] ?? []).map((opt) => (
-                    <SelectItem key={opt.id} value={opt.label}>{opt.label}</SelectItem>
-                  ))}
+                  <SelectItem value="no-change">No Change</SelectItem>
+                  {recommendedOptions.map((product) => {
+                    const label = getProductLabel(product, currentLabel as ComponentLabel);
+                    return (
+                      <SelectItem key={product.id} value={String(product.id)}>
+                        {label || `Product #${product.id}`}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
