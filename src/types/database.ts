@@ -823,6 +823,35 @@ export interface Message {
   created_at: string;
 }
 
+export interface ContactSubmission {
+  id: number;
+  name: string;
+  phone: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: string;
+  company_id: number | null;
+  company_name: string | null;
+  submitter_id: string | null;
+  assigned_to: string | null;
+  created_at: string;
+  updated_at: string;
+  submitter: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string;
+    type: UserType;
+  } | null;
+  assignee: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string;
+  } | null;
+}
+
 export interface Upload {
   id: number;
   user_id: string | null;
