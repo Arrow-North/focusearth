@@ -178,6 +178,29 @@ export function useArchiveProject() {
   });
 }
 
+export function useToggleProjectHidden() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (projectId: number) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)('fn_toggle_project_hidden', {
+        p_project_id: projectId,
+      });
+      if (error) throw error;
+      return data as boolean;
+    },
+    onSuccess: (isHidden, projectId) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      toast.success(isHidden ? 'Project hidden' : 'Project visible');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update project visibility: ${error.message}`);
+    },
+  });
+}
+
 export function useProjectFiles(projectId: number | undefined) {
   return useQuery({
     queryKey: ['project-files', projectId],

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm, useWatch } from 'react-hook-form';
-import type { Luminaire, ProjectArea } from '@/types/database';
+import type { Luminaire, ProjectArea, Product, ProductDetails } from '@/types/database';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -18,7 +18,7 @@ import {
   FormLabel,
 } from '@/components/ui/form';
 import { useProject } from '@/hooks/use-projects';
-import { useCreateReport } from '@/hooks/use-reports';
+import { useCreateReport, useUpdateReport, useReport } from '@/hooks/use-reports';
 import { Check, FileWarning, ExternalLink, ChevronDown, ChevronUp, X, Paperclip } from 'lucide-react';
 import { ProductDetailsModal } from '@/components/shared/ProductDetailsModal';
 import { LuminaireRecommendationModal } from '@/components/shared/LuminaireRecommendationModal';
@@ -42,37 +42,25 @@ function buildLuminaireSummary(lum: Luminaire): string {
   if (lum.powerSupplyDescription) parts.push(`powered by ${lum.powerSupplyDescription}`);
   if (lum.controlDescription) parts.push(`controlled by ${lum.controlDescription}`);
   if (lum.accessoryDescriptionA) parts.push(`with ${lum.accessoryDescriptionA}`);
-  return parts.join(' , ') || '—';
+  return parts.join(' , ') || 'â€”';
 }
 
 function buildRecommendedSummary(
   baseKey: string,
-  selections: Record<string, string>,
+  selections: Record<string, Product | null>,
 ): string {
-  const get = (label: string): string | null => {
-    const v = selections[`${baseKey}-${label}`];
-    return v && v !== 'No Change' ? v : null;
-  };
-  const parts: string[] = [];
-  const fixture = get('Fixture');
-  if (fixture) parts.push(fixture);
-  const lamp = get('Lamp');
-  if (lamp) parts.push(lamp);
-  const power = get('Power Supply');
-  if (power) parts.push(power);
-  const control = get('Control');
-  if (control) parts.push(control);
-  const accessory = get('Accessory');
-  if (accessory) parts.push(accessory);
-  return parts.join(' , ') || '—';
+  return ['Fixture', 'Lamp', 'Power Supply', 'Control', 'Accessory']
+    .map((label) => selections[`${baseKey}-${label}`]?.details?.description ?? null)
+    .filter(Boolean)
+    .join(' , ') || '—';
 }
 
 function getLuminaireComponents(lum: Luminaire) {
   const rows = [
-    { label: 'Fixture',       qty: lum.qty ?? '—',                 description: lum.fixtureDescription ?? '—' },
-    { label: 'Lamp',          qty: lum.lampPerFixture ?? '—',       description: lum.lampDescription ?? '—' },
-    { label: 'Power Supply',  qty: lum.powerQTYFixture ?? '—',      description: lum.powerSupplyDescription ?? '—' },
-    { label: 'Control',       qty: lum.controlQTYFixture ?? '—',    description: lum.controlDescription ?? '—' },
+    { label: 'Fixture',       qty: lum.qty ?? 'â€”',                 description: lum.fixtureDescription ?? 'â€”' },
+    { label: 'Lamp',          qty: lum.lampPerFixture ?? 'â€”',       description: lum.lampDescription ?? 'â€”' },
+    { label: 'Power Supply',  qty: lum.powerQTYFixture ?? 'â€”',      description: lum.powerSupplyDescription ?? 'â€”' },
+    { label: 'Control',       qty: lum.controlQTYFixture ?? 'â€”',    description: lum.controlDescription ?? 'â€”' },
   ];
   if (lum.accessoryDescriptionA) {
     rows.push({ label: 'Accessory', qty: lum.accessoryDescriptionAQty ?? '1', description: lum.accessoryDescriptionA });
@@ -119,10 +107,15 @@ function AreaImage({ src }: { src?: string }) {
 }
 
 export default function CreateReport() {
-  const { id } = useParams<{ id: string }>();
+  const { id, reportId: reportIdParam } = useParams<{ id: string; reportId?: string }>();
   const navigate = useNavigate();
   const projectId = id ? Number(id) : 0;
+  const reportId  = reportIdParam ? Number(reportIdParam) : undefined;
+  const isEdit    = !!reportId;
+
   const createReport = useCreateReport();
+  const updateReport = useUpdateReport();
+  const { data: existingReportData } = useReport(reportId);
 
   const { data: project } = useProject(projectId || undefined);
   const areas = (project?.areas ?? []) as ProjectArea[];
@@ -158,7 +151,7 @@ export default function CreateReport() {
     areaTitle: string;
     lumIndex: number;
   } | null>(null);
-  const [recommendedSelections, setRecommendedSelections] = useState<Record<string, string>>({});
+  const [recommendedSelections, setRecommendedSelections] = useState<Record<string, Product | null>>({});
 
   const [openAreaDetails, setOpenAreaDetails] = useState<Set<number>>(new Set());
   const toggleAreaDetails = (index: number) =>
@@ -180,20 +173,90 @@ export default function CreateReport() {
   const [installationBidModalOpen, setInstallationBidModalOpen] = useState(false);
   const [installationBidExpanded, setInstallationBidExpanded] = useState(true);
 
+  // Pre-populate form fields when editing an existing report
+  useEffect(() => {
+    if (!isEdit || !existingReportData?.report) return;
+    const r = existingReportData.report;
+
+    // Extract selected area titles from the saved proposal array
+    const savedAreas = Array.isArray(r.proposal)
+      ? (r.proposal as Record<string, unknown>[])
+          .map((item) => item.title as string)
+          .filter(Boolean)
+      : [];
+
+    form.reset({
+      proposalName:         r.proposal_name ?? '',
+      selectAreas:          savedAreas,
+      biddingOption:        r.bidding ? 'Bidding Open' : 'Bidding Closed',
+      illuminationReports:  [],
+      installationEstimate: '',
+      notes:                typeof r.notes === 'string' ? r.notes : '',
+      status:               r.status ?? 'draft',
+    });
+    if (r.bidding) setIsBiddingOpen(true);
+
+    // Rehydrate recommendedSelections from the saved proposal so the
+    // Recommended column is populated when editing an existing report.
+    if (Array.isArray(r.proposal)) {
+      const selections: Record<string, Product | null> = {};
+      const COMPONENT_MAP: [string, string][] = [
+        ['Fixture',      'fixtureRecommended'],
+        ['Lamp',         'lampRecommended'],
+        ['Power Supply', 'powerSupplyRecommended'],
+        ['Control',      'controlRecommended'],
+        ['Accessory',    'accessoryRecommended'],
+      ];
+
+      (r.proposal as Record<string, unknown>[]).forEach((area) => {
+        const areaTitle = String(area.title ?? '');
+        const lums = Array.isArray(area.luminaires)
+          ? (area.luminaires as Record<string, unknown>[])
+          : [];
+
+        lums.forEach((lum, li) => {
+          const baseKey = `${areaTitle}-${li}`;
+          COMPONENT_MAP.forEach(([label, field]) => {
+            const details = lum[field] as ProductDetails | null | undefined;
+            if (details) {
+              selections[`${baseKey}-${label}`] = {
+                id: 0,
+                user_id: null,
+                company_id: null,
+                project_id: null,
+                report_id: null,
+                estimate_su_id: null,
+                airtable_record: '',
+                airtable_base: null,
+                airtable_colum_name: '',
+                details,
+                is_existing: false,
+                created_at: '',
+                updated_at: null,
+              };
+            }
+          });
+        });
+      });
+
+      setRecommendedSelections(selections);
+    }
+  }, [isEdit, existingReportData]);
+
   const renderLuminaireRow = (area: ProjectArea, li: number, lum: Luminaire) => {
     const lumKey = `${area.title}-${li}`;
     const isOpen = openLuminaires.has(lumKey);
     const components = getLuminaireComponents(lum);
     return (
       <div key={lumKey} className="mb-8">
-        {/* Summary row — always visible, same height both sides, click toggles accordion */}
+        {/* Summary row â€” always visible, same height both sides, click toggles accordion */}
         <div className="flex cursor-pointer gap-4" onClick={() => toggleLuminaire(lumKey)}>
           {/* Existing summary */}
           <div className="flex-1 p-4 bg-gray-50 hover:bg-gray-200 transition-colors border border-gray-200">
             <div className="grid grid-cols-[48px_1fr_64px] gap-2 text-xs items-start">
-              <span className="font-medium">{lum.qty ?? '—'}</span>
+              <span className="font-medium">{lum.qty ?? 'â€”'}</span>
               <span className="text-center text-gray-700 leading-snug">{buildLuminaireSummary(lum)}</span>
-              <span className="text-center text-gray-500">{lum.fixtureMountHeight ?? '—'}</span>
+              <span className="text-center text-gray-500">{lum.fixtureMountHeight ?? 'â€”'}</span>
             </div>
           </div>
           {/* Recommended summary or Add Recommendation */}
@@ -201,14 +264,14 @@ export default function CreateReport() {
             const baseKey = `${area.title ?? ''}-${li}`;
             const hasRec = ['Fixture', 'Lamp', 'Power Supply', 'Control', 'Accessory'].some((label) => {
               const v = recommendedSelections[`${baseKey}-${label}`];
-              return v && v !== 'No Change';
+              return v != null;
             });
             return hasRec ? (
               <div className="flex-1 p-4 bg-gray-50 hover:bg-gray-200 transition-colors border border-[#619c48]">
                 <div className="grid grid-cols-[48px_1fr_64px] gap-2 text-xs items-start">
-                  <span className="font-medium">{lum.qty ?? '—'}</span>
+                  <span className="font-medium">{lum.qty ?? 'â€”'}</span>
                   <span className="text-center leading-snug">{buildRecommendedSummary(baseKey, recommendedSelections)}</span>
-                  <span className="text-center text-gray-500">{lum.fixtureMountHeight ?? '—'}</span>
+                  <span className="text-center text-gray-500">{lum.fixtureMountHeight ?? 'â€”'}</span>
                 </div>
               </div>
             ) : (
@@ -221,7 +284,7 @@ export default function CreateReport() {
           })()}
         </div>
 
-        {/* Accordion — component breakdown */}
+        {/* Accordion â€” component breakdown */}
         {isOpen && (
           <div className="flex gap-4">
             {/* Existing components */}
@@ -250,13 +313,13 @@ export default function CreateReport() {
               {components.map((c) => {
                 const recKey = `${area.title}-${li}-${c.label}`;
                 const recValue = recommendedSelections[recKey];
-                const isSelected = !!recValue && recValue !== 'No Change';
+                const isSelected = recValue != null;
                 const inputStyle = { borderColor: '#619c48', backgroundColor: isSelected ? '#dbfdce' : '' };
                 return (
                 <div key={c.label} className="grid grid-cols-[100px_56px_1fr_60px] gap-2 text-sm py-1 items-center">
                   <span className="text-gray-600">{c.label}</span>
                   <input readOnly value={c.qty} className="border rounded px-2 py-0.5 text-xs w-full bg-gray-50" style={inputStyle} />
-                  <input readOnly value={recValue ?? 'No Change'} className="border rounded px-2 py-0.5 text-xs w-full bg-gray-50" style={inputStyle} />
+                  <input readOnly value={recValue?.details?.description ?? 'No Change'} className="border rounded px-2 py-0.5 text-xs w-full bg-gray-50" style={inputStyle} />
                   <Button
                     type="button"
                     size="sm"
@@ -274,18 +337,58 @@ export default function CreateReport() {
       </div>
     );
   };
+  function buildProposal() {
+    return selectedAreas.map((area) => ({
+      title: area.title,
+      luminaires: (area.luminaires ?? []).map((lum, li) => {
+        const baseKey = `${area.title ?? ''}-${li}`;
+        const rec = (label: string) => recommendedSelections[`${baseKey}-${label}`] ?? null;
+        return {
+          qty:                     lum.qty,
+          lampPerFixture:          lum.lampPerFixture,
+          lampWattage:             lum.lampWattage,
+          lampPricePerUnit:        lum.lampPricePerUnit,
+          powerPricePerUnit:       lum.powerPricePerUnit,
+          controlDescription:      lum.controlDescription,
+          fixtureExisting:         lum.fixtureExisting         ?? null,
+          fixtureRecommended:      rec('Fixture')?.details     ?? null,
+          lampExisting:            lum.lampExisting            ?? null,
+          lampRecommended:         rec('Lamp')?.details        ?? null,
+          powerSupplyExisting:     lum.powerSupplyExisting     ?? null,
+          powerSupplyRecommended:  rec('Power Supply')?.details ?? null,
+          controlExisting:         lum.controlExisting         ?? null,
+          controlRecommended:      rec('Control')?.details     ?? null,
+          accessoryExisting:       lum.accessoryExisting       ?? null,
+          accessoryRecommended:    rec('Accessory')?.details   ?? null,
+        };
+      }),
+    }));
+  }
+
 
   const onSubmit = async (values: ReportFormValues) => {
-    const reportId = await createReport.mutateAsync({
-      projectId,
-      proposal: {},
-      proposalName: values.proposalName,
-      status: values.status,
-      notes: values.notes || undefined,
-    });
-
-    navigate(`/reports/${reportId}`);
+    if (isEdit && reportId) {
+      await updateReport.mutateAsync({
+        reportId,
+        proposalName: values.proposalName,
+        status:       values.status,
+        notes:        values.notes || undefined,
+        proposal:     buildProposal(),
+      });
+      navigate(`/projects/${projectId}/proposal/${reportId}`);
+    } else {
+      const newReportId = await createReport.mutateAsync({
+        projectId,
+        proposal:     buildProposal(),
+        proposalName: values.proposalName,
+        status:       values.status,
+        notes:        values.notes || undefined,
+      });
+      navigate(`/reports/${newReportId}`);
+    }
   };
+
+  const isPending = isEdit ? updateReport.isPending : createReport.isPending;
 
   const headerActions = (
     <div className="flex items-center gap-2">
@@ -303,10 +406,10 @@ export default function CreateReport() {
         size="sm"
         className="bg-lime-400 hover:bg-lime-500 text-gray-900"
         onClick={form.handleSubmit(onSubmit)}
-        disabled={createReport.isPending}
+        disabled={isPending}
       >
         <Check className="h-4 w-4 mr-1.5" />
-        {createReport.isPending ? 'Saving...' : 'Done'}
+        {isPending ? 'Saving...' : 'Done'}
       </Button>
     </div>
   );
@@ -512,7 +615,7 @@ export default function CreateReport() {
                       )}
                     </div>
 
-                    {/* Per-area breakdown — banner first, then that area's luminaires */}
+                    {/* Per-area breakdown â€” banner first, then that area's luminaires */}
                     {selectedAreas.map((area, areaIndex) => (
                       <div key={area.title}>
                         <div className="rounded-lg overflow-hidden mb-8">
@@ -618,9 +721,10 @@ export default function CreateReport() {
           onOpenChange={(open) => { if (!open) setRecommendationModal(null); }}
           lum={recommendationModal.lum}
           componentLabel={recommendationModal.label}
-          onSave={(componentLabel, _qty, changeType) => {
+          companyId={project?.company_id}
+          onSave={(componentLabel, _qty, product) => {
             const key = `${recommendationModal.areaTitle}-${recommendationModal.lumIndex}-${componentLabel}`;
-            setRecommendedSelections((prev) => ({ ...prev, [key]: changeType }));
+            setRecommendedSelections((prev) => ({ ...prev, [key]: product }));
           }}
         />
       )}

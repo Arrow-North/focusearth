@@ -116,6 +116,7 @@ export interface Project {
   updated_at: string | null;
   priority_admin: boolean;
   archived: boolean;
+  hidden: boolean;
   status_admin: string;
   airtable_id: string | null;
 }
@@ -583,55 +584,172 @@ export interface ShippingDetail {
 }
 
 export interface ProductDetails {
+  // ── General ─────────────────────────────────────────────
   description?: string;
   supplier?: string;
   productType?: string;
   type?: string;
   manufacturer?: string;
   orderCode?: string;
-  length?: string;
-  width?: string;
-  diameter?: string;
-  depth?: string;
   wattage?: string;
+  areaName?: string;
+  qty?: string;
+  ledType?: boolean;
+  airtableId?: string;
+  illuminationReport?: string | null;
+
+  // ── Fixture ─────────────────────────────────────────────
+  fixtureMount?: string;
+  fixtureStyle?: string;
+  fixtureApplication?: string;
+  fixtureDescription?: string;
+  fixtureMountHeight?: string;
+  fixtureLength?: string;
+  fixtureWidth?: string;
+  fixtureDepth?: string;
+  fixtureDiameter?: string;
+  fixtureLens?: string;
+  fixturePricePerUnit?: string;
+
+  // ── Lamp ────────────────────────────────────────────────
+  lampCategory?: string;
+  lampCategoryType?: string;
+  lampWattage?: string;
+  lampLensType?: string;
+  lampPerFixture?: string;
+  lampColorTemperature?: string;
+  lampBaseCategory?: string;
+  lampBaseCategoryType?: string;
+  lampDescription?: string;
+  lampProductCode?: string;
+  lampPricePerUnit?: string;
+
+  // ── Control ─────────────────────────────────────────────
+  controlType?: string;
+  controlModel?: string;
+  controlDimming?: string;
+  controlQTYFixture?: string;
+  controlManufacturer?: string;
+  controlPricePerUnit?: string;
+  controlDescription?: string;
+  controlRecordId?: string;
+
+  // ── Power Supply ─────────────────────────────────────────
+  powerSupplyType?: string;
+  powerSupplyModel?: string;
+  powerQTYFixture?: string;
+  powerSupplyManufacturer?: string;
+  powerPricePerUnit?: string;
+  powerSupplyDescription?: string;
+  powerSupplyProductCode?: string;
+
+  // ── Accessories (slots A / B / C) ────────────────────────
+  accessoryRecordId?: string;
+  accessoryTypeA?: string;
+  accessoryColorA?: string;
+  accessoryLengthA?: string;
+  accessoryWidthA?: string;
+  accessoryDepthA?: string;
+  accessoryDiameterA?: string;
+  accessoryManufacturerA?: string;
+  accessoryPricePerUnitA?: string;
+  accessoryDescriptionA?: string;
+  accessoryProductCodeA?: string;
+  accessoryDescriptionAQty?: string;
+  accessoryTypeB?: string;
+  accessoryColorB?: string;
+  accessoryLengthB?: string;
+  accessoryWidthB?: string;
+  accessoryDepthB?: string;
+  accessoryDiameterB?: string;
+  accessoryManufacturerB?: string;
+  accessoryPricePerUnitB?: string;
+  accessoryDescriptionB?: string;
+  accessoryProductCodeB?: string;
+  accessoryDescriptionBQty?: string;
+  accessoryTypeC?: string;
+  accessoryColorC?: string;
+  accessoryLengthC?: string;
+  accessoryWidthC?: string;
+  accessoryDepthC?: string;
+  accessoryDiameterC?: string;
+  accessoryManufacturerC?: string;
+  accessoryPricePerUnitC?: string;
+  accessoryDescriptionC?: string;
+  accessoryProductCodeC?: string;
+  accessoryDescriptionCQty?: string;
+
+  // ── Fixture (canonical names) ────────────────────────────
+  fixtureShape?: string;
+  fixtureWarranty?: string;
+  image?: string;
+  lampType?: string;
+  baseType?: string;
+
+  // ── Dimensions (canonical names) ─────────────────────────
+  dimensionsLength?: string;
+  dimensionsWidth?: string;
+  dimensionsDiameter?: string;
+  dimensionsDepth?: string;
+
+  // ── LED Replacement Specs ────────────────────────────────
   lumens?: string;
-  cct?: string;
+  cct?: string | string[];
   cri?: string;
   beamAngle?: string;
   optics?: string;
   thd?: string;
-  voltageMin?: string;
-  voltageMax?: string;
+  vMin?: string;
+  vMax?: string;
   pricePerUnit?: string;
-  warranty?: string;
-  l70Lifetime?: string;
   lifetime?: string;
   dimmability?: string;
   colorTunable?: string;
   powerFactor?: string;
-  cbcp?: string;
+  cBCP?: string;
   application?: string;
-  style?: string;
-  mount?: string;
-  shape?: string;
   lensType?: string;
   ingressProtection?: string;
   fixtureColor?: string;
   trim?: string;
-  certifications?: string;
+  certifications?: string | string[];
   buyAmerica?: string;
   installationTime?: string;
+  approxDeliveryDays?: string;
+  volumeTier1MinQty?: string;
+  volumeTier1PPU?: string;
+  volumeTier2MinQty?: string;
+  volumeTier2PPU?: string;
+
+  // ── Additional (canonical names) ─────────────────────────
+  supplierProductDescription?: string;
+  productSpecificationsHyperlink?: string;
+  installationInstructionsHyperlink?: string;
+  productImageHyperlink?: string;
+  compatibleProductOrderCodes?: string | string[];
+  notes?: string;
+
+  // ── Legacy aliases (kept for backwards compatibility) ────
+  style?: string;
+  mount?: string;
+  shape?: string;
+  length?: string;
+  width?: string;
+  diameter?: string;
+  depth?: string;
+  warranty?: string;
+  l70Lifetime?: string;
+  voltageMin?: string;
+  voltageMax?: string;
+  cbcp?: string;
   deliveryDays?: string;
   volumeTier1Qty?: string;
-  volumeTier1PPU?: string;
   volumeTier2Qty?: string;
-  volumeTier2PPU?: string;
   supplierDescription?: string;
   productSpecifications?: string;
   installationInstructions?: string;
   productImage?: string;
   compatibleOrderCodes?: string;
-  notes?: string;
 }
 
 export type ProductCategory = 'fixtures' | 'lamp' | 'control' | 'power-supply' | 'accessories';
@@ -647,6 +765,7 @@ export interface Product {
   airtable_base: string | null;
   airtable_colum_name: string;
   details: ProductDetails;
+  is_existing: boolean;
   created_at: string;
   updated_at: string | null;
 }

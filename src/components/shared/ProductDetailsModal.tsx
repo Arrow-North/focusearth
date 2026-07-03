@@ -262,17 +262,17 @@ export function ProductDetailsModal({ open, onOpenChange, lum, componentLabel }:
           <div className="grid grid-cols-3 gap-4">
             <div className="border border-gray-200 rounded p-3">
               {col1Fields.map((f) => (
-                <FieldRow key={f.key} label={f.label} value={details[f.key]} />
+                <FieldRow key={f.key} label={f.label} value={str(details[f.key])} />
               ))}
             </div>
             <div className="border border-gray-200 rounded p-3">
               {col2Fields.map((f) => (
-                <FieldRow key={f.key} label={f.label} value={details[f.key]} />
+                <FieldRow key={f.key} label={f.label} value={str(details[f.key])} />
               ))}
             </div>
             <div className="border border-gray-200 rounded p-3">
               {col3Fields.map((f) => (
-                <FieldRow key={f.key} label={f.label} value={details[f.key]} />
+                <FieldRow key={f.key} label={f.label} value={str(details[f.key])} />
               ))}
             </div>
           </div>

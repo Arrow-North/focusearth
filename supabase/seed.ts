@@ -48,8 +48,18 @@ async function createAuthUser(
     email_confirm: true,
     user_metadata: meta,
   });
-  if (error) throw new Error(`createAuthUser(${email}): ${error.message}`);
-  return data.user.id;
+
+  if (!error) return data.user.id;
+
+  // User already exists from a previous seed run — look up their ID
+  if (error.message.includes("already been registered") || error.message.includes("already registered")) {
+    const { data: list, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    if (listErr) throw new Error(`createAuthUser lookup(${email}): ${listErr.message}`);
+    const existing = list.users.find((u) => u.email === email);
+    if (existing) return existing.id;
+  }
+
+  throw new Error(`createAuthUser(${email}): ${error.message}`);
 }
 
 async function insert<T extends Record<string, unknown>>(
@@ -58,9 +68,14 @@ async function insert<T extends Record<string, unknown>>(
 ): Promise<T[]> {
   const { data, error } = await supabase
     .from(table)
-    .insert(rows as never)
+    .upsert(rows as never, { ignoreDuplicates: true })
     .select();
-  if (error) throw new Error(`insert(${table}): ${error.message}`);
+  if (error) {
+    const msg = error?.message || error?.code || error?.details
+      || JSON.stringify(error, Object.getOwnPropertyNames(error as object))
+      || 'unknown error';
+    throw new Error(`insert(${table}): ${msg}`);
+  }
   return data as T[];
 }
 
@@ -69,12 +84,21 @@ async function update(
   match: Record<string, unknown>,
   fields: Record<string, unknown>,
 ) {
-  let query = supabase.from(table).update(fields as never);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any = supabase.from(table).update(fields as never);
   for (const [k, v] of Object.entries(match)) {
-    query = query.eq(k, v as never);
+    query = query.eq(k, v);
   }
   const { error } = await query;
-  if (error) throw new Error(`update(${table}): ${error.message}`);
+  if (error) {
+    const msg = error?.message || error?.code || error?.details || JSON.stringify(error) || 'unknown error';
+    throw new Error(`update(${table}): ${msg}`);
+  }
+}
+
+/** Wait for auth trigger to create profile rows before updating them */
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Return an ISO date string N months ago with a random day offset */
@@ -134,12 +158,26 @@ async function main() {
   }
 
   // Enable all profiles and set titles
-  console.log("\nEnabling profiles...");
+  // Wait for the auth trigger (fn_on_auth_user_created) to finish
+  // creating profile rows before we try to update them.
+  console.log("\nWaiting for auth trigger to create profiles...");
+  await sleep(3000);
+
+  console.log("Enabling profiles...");
   for (const u of USERS) {
-    await update("profiles", { id: userIds[u.email] }, {
-      enabled: true,
-      title: titleForType(u.meta.type),
+    const uid = userIds[u.email];
+    if (!uid) { console.warn(`  ⚠ No ID for ${u.email}, skipping`); continue; }
+
+    // Go through the auth admin API — avoids PostgREST triggers on the profiles table
+    const { error } = await supabase.auth.admin.updateUserById(uid, {
+      user_metadata: { ...u.meta, enabled: true, title: titleForType(u.meta.type) },
     });
+
+    if (error) {
+      console.error(`  ✗ ${u.email}: ${error.message}`);
+    } else {
+      console.log(`  ✓ ${u.meta.first_name} ${u.meta.last_name}`);
+    }
   }
 
   // Shorthand IDs
@@ -827,6 +865,140 @@ async function main() {
   // ── 5. Reports ─────────────────────────────────────────────────────────
   console.log("\nSeeding reports...");
 
+  // ProposalItem[] shape the calculate-report edge function reads.
+  // custom_pricing is null on all reports so the calculation runs.
+  const seedProposal = [
+    {
+      title: "Front Desk",
+      application: "Indoor",
+      dailyUsage: "24",
+      areaSqFt: "10000",
+      controlType: "Wall Switch",
+      luminaires: [
+        {
+          qty: "200",
+          lampPerFixture: "2",
+          lampWattage: "36",
+          lampPricePerUnit: "5",
+          powerPricePerUnit: "5",
+          controlDescription: "None",
+          lampExisting: {
+            CRI: "85",
+            "Directional Lumens": "1560",
+            "Lifetime (hrs)": 24000,
+            "Installation Time (hrs)": 0.04,
+            "Installation Time (min)": 2,
+            "Mercury/System (mg)": 10,
+            "PPU ($)": 4.17,
+          },
+          powerSupplyExisting: {
+            "Expected Lifetime (Hours)": 45000,
+            "PPU ($)": 10,
+          },
+          recommendedFixtureQty: "200",
+          recommendedLampQty: "1",
+          recommendedLamp: {
+            Wattage: "18",
+            Lumens: "2200",
+            CRI: "85",
+            "L70 Lifetime (hours)": "50000",
+            "Price Per Unit ($)": "22.00",
+            "Volume Tier 1 PPU ($)": "19.50",
+            "Volume Tier 2 PPU ($)": "17.00",
+            "Approx. Installation Time (minutes)": "10",
+            "Approx. Delivery (days)": "14",
+            controlRecomendedDescription: "None",
+            "Color Tunable": "No",
+          },
+          recommendedPowerSupply: { "Price Per Unit ($)": "0", "L70 Lifetime (hours)": "0" },
+        },
+        {
+          qty: "75",
+          lampPerFixture: "1",
+          lampWattage: "100",
+          lampPricePerUnit: "5",
+          powerPricePerUnit: "5",
+          controlDescription: "None",
+          lampExisting: {
+            CRI: "80",
+            "Directional Lumens": "1200",
+            "Lifetime (hrs)": 25,
+            "Installation Time (hrs)": 0.04,
+            "Installation Time (min)": 2,
+            "Mercury/System (mg)": 0,
+            "PPU ($)": 6.97,
+          },
+          powerSupplyExisting: {
+            "Expected Lifetime (Hours)": 45000,
+            "PPU ($)": 10,
+          },
+          recommendedFixtureQty: "75",
+          recommendedLampQty: "1",
+          recommendedLamp: {
+            Wattage: "10",
+            Lumens: "1000",
+            CRI: "90",
+            "L70 Lifetime (hours)": "50000",
+            "Price Per Unit ($)": "35.00",
+            "Volume Tier 1 PPU ($)": "31.00",
+            "Volume Tier 2 PPU ($)": "27.00",
+            "Approx. Installation Time (minutes)": "8",
+            "Approx. Delivery (days)": "7",
+            controlRecomendedDescription: "None",
+            "Color Tunable": "No",
+          },
+          recommendedPowerSupply: { "Price Per Unit ($)": "0", "L70 Lifetime (hours)": "0" },
+        },
+      ],
+    },
+    {
+      title: "Parking Lot",
+      application: "Garage",
+      dailyUsage: "24",
+      areaSqFt: "100000",
+      controlType: "Photocell",
+      luminaires: [
+        {
+          qty: "200",
+          lampPerFixture: "2",
+          lampWattage: "36",
+          lampPricePerUnit: "5",
+          powerPricePerUnit: "5",
+          controlDescription: "Photocell",
+          lampExisting: {
+            CRI: "85",
+            "Directional Lumens": "1560",
+            "Lifetime (hrs)": 24000,
+            "Installation Time (hrs)": 0.04,
+            "Installation Time (min)": 2,
+            "Mercury/System (mg)": 10,
+            "PPU ($)": 4.17,
+          },
+          powerSupplyExisting: {
+            "Expected Lifetime (Hours)": 45000,
+            "PPU ($)": 10,
+          },
+          recommendedFixtureQty: "200",
+          recommendedLampQty: "1",
+          recommendedLamp: {
+            Wattage: "40",
+            Lumens: "4000",
+            CRI: "80",
+            "L70 Lifetime (hours)": "100000",
+            "Price Per Unit ($)": "45.00",
+            "Volume Tier 1 PPU ($)": "40.00",
+            "Volume Tier 2 PPU ($)": "35.00",
+            "Approx. Installation Time (minutes)": "20",
+            "Approx. Delivery (days)": "7",
+            controlRecomendedDescription: "Photocell",
+            "Color Tunable": "No",
+          },
+          recommendedPowerSupply: { "Price Per Unit ($)": "0", "L70 Lifetime (hours)": "0" },
+        },
+      ],
+    },
+  ];
+
   const reportsData = [
     { project_idx: 0, created_by: reuId, status: "active", name: "Office Retrofit Proposal A", system_price: "145000", led_price: "98000", approved: true, active: true },
     { project_idx: 0, created_by: suId, status: "active", name: "Office Retrofit Proposal B", system_price: "172000", led_price: "118000", approved: false, active: true },
@@ -852,7 +1024,8 @@ async function main() {
       status: r.status,
       notes: `Seed report: ${r.name}`,
       sort_id: i + 1,
-      proposal: { areas: 2, total_luminaires: 50 + i * 10, estimated_savings_kwh: 10000 + i * 5000, estimated_annual_savings: 2000 + i * 1000 },
+      proposal: seedProposal,
+      custom_pricing: null,
       proposal_name: r.name,
       system_price: r.system_price,
       led_price: r.led_price,
@@ -1044,55 +1217,172 @@ async function main() {
   // ── 7. Products ────────────────────────────────────────────────────────
   console.log("\nSeeding products...");
 
-  const productCategories = ["fixtures", "fixtures", "fixtures", "lamp", "lamp", "control", "control", "power-supply", "power-supply", "accessories"];
-  const productTypes = ["LED Panel", "Troffer", "Downlight", "T8 LED Tube", "A19 LED", "Dimmer", "Occupancy Sensor", "LED Driver", "Transformer", "Mounting Kit"];
-  const productNames = [
-    "2x4 LED Panel – 40W 4000K DLC Premium",
-    "2x4 Troffer Retrofit – 50W 5000K",
-    '6" Recessed Downlight – 15W 3500K',
-    "T8 LED Tube 4ft – 18W 4000K Direct Wire",
-    "A19 LED Bulb – 9W 2700K Dimmable",
-    "0-10V Dimmer Module – 120/277V",
-    "Ceiling Occupancy Sensor – PIR 360°",
-    "LED Driver – 40W Constant Current",
-    "12V Transformer – 60W Class 2",
-    "Surface Mount Kit – 2x4 Panel",
+  // 10 templates × 5 categories × 3 supplier companies = 150 products.
+  // All are recommended products (is_existing = false), batch-inserted per company.
+
+  type ProdTpl = { record: string; category: string; basePpu: number; details: Record<string, unknown> };
+
+  const LAMP_TPLS: ProdTpl[] = [
+    { record: "T8 LED 4ft 18W 4000K Direct Wire",        category: "lamp", basePpu:  22, details: { type: "T8",    category: "T Series",   baseType: "Medium Bipin", wattage: "18", colorTemperature: "4000", cri: "80", lifetimeHrs: 50000, directionalLumens: "2200", recyclingCost: 0.25, installTimeHrs: 0.17, installTimeMin: 10, wattageMin: 18, wattageMax: 18, dimensionWidth: "1",     dimensionLength: "48"   } },
+    { record: "T8 LED 4ft 15W 5000K Ballast Compatible", category: "lamp", basePpu:  18, details: { type: "T8",    category: "T Series",   baseType: "Medium Bipin", wattage: "15", colorTemperature: "5000", cri: "82", lifetimeHrs: 50000, directionalLumens: "1800", recyclingCost: 0.25, installTimeHrs: 0.08, installTimeMin:  5, wattageMin: 15, wattageMax: 15, dimensionWidth: "1",     dimensionLength: "48"   } },
+    { record: "T5 LED 2ft 10W 3500K",                    category: "lamp", basePpu:  15, details: { type: "T5",    category: "T Series",   baseType: "Mini Bipin",   wattage: "10", colorTemperature: "3500", cri: "80", lifetimeHrs: 50000, directionalLumens: "1100", recyclingCost: 0.20, installTimeHrs: 0.13, installTimeMin:  8, wattageMin: 10, wattageMax: 10, dimensionWidth: "0.625", dimensionLength: "24"   } },
+    { record: "PAR30 LED 15W 3000K Dimmable",            category: "lamp", basePpu:  28, details: { type: "PAR30", category: "PAR Series", baseType: "E26 Medium",   wattage: "15", colorTemperature: "3000", cri: "90", lifetimeHrs: 25000, directionalLumens: "1050", recyclingCost: 0.25, installTimeHrs: 0.05, installTimeMin:  3, wattageMin: 15, wattageMax: 15, dimensionWidth: "3.75",  dimensionLength: "3.75" } },
+    { record: "PAR38 LED 23W 4000K",                     category: "lamp", basePpu:  35, details: { type: "PAR38", category: "PAR Series", baseType: "E26 Medium",   wattage: "23", colorTemperature: "4000", cri: "82", lifetimeHrs: 25000, directionalLumens: "1600", recyclingCost: 0.25, installTimeHrs: 0.05, installTimeMin:  3, wattageMin: 23, wattageMax: 23, dimensionWidth: "4.75",  dimensionLength: "4.75" } },
+    { record: "A19 LED 9W 2700K Dimmable",               category: "lamp", basePpu:   8, details: { type: "A19",   category: "A Series",   baseType: "E26 Medium",   wattage: "9",  colorTemperature: "2700", cri: "80", lifetimeHrs: 15000, directionalLumens: "800",  recyclingCost: 0.15, installTimeHrs: 0.03, installTimeMin:  2, wattageMin:  9, wattageMax:  9, dimensionWidth: "2.37",  dimensionLength: "4.33" } },
+    { record: "A19 LED 12W 3000K",                       category: "lamp", basePpu:  10, details: { type: "A19",   category: "A Series",   baseType: "E26 Medium",   wattage: "12", colorTemperature: "3000", cri: "80", lifetimeHrs: 15000, directionalLumens: "1100", recyclingCost: 0.15, installTimeHrs: 0.03, installTimeMin:  2, wattageMin: 12, wattageMax: 12, dimensionWidth: "2.37",  dimensionLength: "4.33" } },
+    { record: "MR16 LED 7W 3000K",                       category: "lamp", basePpu:  12, details: { type: "MR16",  category: "MR Series",  baseType: "GU5.3 Bipin",  wattage: "7",  colorTemperature: "3000", cri: "90", lifetimeHrs: 25000, directionalLumens: "500",  recyclingCost: 0.15, installTimeHrs: 0.05, installTimeMin:  3, wattageMin:  7, wattageMax:  7, dimensionWidth: "2",     dimensionLength: "1.97" } },
+    { record: "BR30 LED 13W 5000K",                      category: "lamp", basePpu:  12, details: { type: "BR30",  category: "BR Series",  baseType: "E26 Medium",   wattage: "13", colorTemperature: "5000", cri: "80", lifetimeHrs: 15000, directionalLumens: "650",  recyclingCost: 0.15, installTimeHrs: 0.03, installTimeMin:  2, wattageMin: 13, wattageMax: 13, dimensionWidth: "3.75",  dimensionLength: "4.5"  } },
+    { record: "PL LED 13W 4100K 2-Pin",                  category: "lamp", basePpu:  20, details: { type: "PL",    category: "PL Series",  baseType: "G24d-1 2-Pin", wattage: "13", colorTemperature: "4100", cri: "82", lifetimeHrs: 30000, directionalLumens: "900",  recyclingCost: 0.20, installTimeHrs: 0.08, installTimeMin:  5, wattageMin: 13, wattageMax: 13, dimensionWidth: "1.5",   dimensionLength: "5.5"  } },
   ];
-  const pricePerUnits = ["185", "210", "95", "12", "8", "45", "65", "38", "28", "22"];
 
-  // Create products across multiple projects and estimates
-  const productRows: any[] = [];
-  const suEstimateIds = suEstimates.filter((e: any) => !e.archived).map((e: any) => e.id);
+  const FIXTURE_TPLS: ProdTpl[] = [
+    { record: "2x4 LED Panel 40W 4000K DLC",         category: "fixtures", basePpu: 185, details: { style: "Panel",    mount: "Recessed", lens: "Diffused",  depth: "3.5", width: "24", length: "48", diameter: "",   application: "Indoor",              lifetimeHrs:  50000, recyclingCost: 0.50, installTimeHrs: 0.33, installTimeMin: 20, depthMin: 3,  depthMax:  5, widthMin: 23.5, widthMax: 24.5, lengthMin: 47.5, lengthMax: 48.5, diameterMin:  0, diameterMax:  0 } },
+    { record: "2x2 LED Panel 30W 4000K",             category: "fixtures", basePpu: 150, details: { style: "Panel",    mount: "Recessed", lens: "Diffused",  depth: "3.5", width: "24", length: "24", diameter: "",   application: "Indoor",              lifetimeHrs:  50000, recyclingCost: 0.40, installTimeHrs: 0.25, installTimeMin: 15, depthMin: 3,  depthMax:  5, widthMin: 23.5, widthMax: 24.5, lengthMin: 23.5, lengthMax: 24.5, diameterMin:  0, diameterMax:  0 } },
+    { record: "2x4 LED Troffer 50W 5000K",           category: "fixtures", basePpu: 210, details: { style: "Troffer",  mount: "Recessed", lens: "Prismatic", depth: "5",   width: "24", length: "48", diameter: "",   application: "Indoor",              lifetimeHrs:  60000, recyclingCost: 0.50, installTimeHrs: 0.42, installTimeMin: 25, depthMin: 4,  depthMax:  6, widthMin: 23.5, widthMax: 24.5, lengthMin: 47.5, lengthMax: 48.5, diameterMin:  0, diameterMax:  0 } },
+    { record: '6" LED Recessed Downlight 15W 3500K', category: "fixtures", basePpu:  95, details: { style: "Can",      mount: "Recessed", lens: "Clear",     depth: "8",   width: "6",  length: "6",  diameter: "6",  application: "Indoor",              lifetimeHrs:  50000, recyclingCost: 0.30, installTimeHrs: 0.25, installTimeMin: 15, depthMin: 7,  depthMax: 10, widthMin:  5.5, widthMax:  6.5, lengthMin:  5.5, lengthMax:  6.5, diameterMin:  5, diameterMax:  7 } },
+    { record: '4" LED Recessed Downlight 10W 3000K', category: "fixtures", basePpu:  75, details: { style: "Can",      mount: "Recessed", lens: "Clear",     depth: "6",   width: "4",  length: "4",  diameter: "4",  application: "Indoor",              lifetimeHrs:  50000, recyclingCost: 0.25, installTimeHrs: 0.20, installTimeMin: 12, depthMin: 5,  depthMax:  8, widthMin:  3.5, widthMax:  4.5, lengthMin:  3.5, lengthMax:  4.5, diameterMin:  3, diameterMax:  5 } },
+    { record: "LED Linear Strip 4ft 30W 4000K",      category: "fixtures", basePpu:  65, details: { style: "Strip",    mount: "Surface",  lens: "Clear",     depth: "2",   width: "3",  length: "48", diameter: "",   application: "Indoor, Garage",      lifetimeHrs:  50000, recyclingCost: 0.35, installTimeHrs: 0.25, installTimeMin: 15, depthMin: 1,  depthMax:  3, widthMin:  2,   widthMax:  4,   lengthMin: 47,   lengthMax: 49,   diameterMin:  0, diameterMax:  0 } },
+    { record: "LED UFO High Bay 100W 5000K",         category: "fixtures", basePpu: 280, details: { style: "High Bay", mount: "Pendant",  lens: "Clear",     depth: "9",   width: "15", length: "15", diameter: "15", application: "Industrial, Warehouse",lifetimeHrs: 100000, recyclingCost: 1.00, installTimeHrs: 0.50, installTimeMin: 30, depthMin: 8,  depthMax: 12, widthMin: 14,   widthMax: 16,   lengthMin: 14,   lengthMax: 16,   diameterMin: 12, diameterMax: 18 } },
+    { record: "LED Wall Pack 40W 5000K",             category: "fixtures", basePpu: 110, details: { style: "Wall Pack",mount: "Wall",     lens: "Clear",     depth: "4",   width: "8",  length: "12", diameter: "",   application: "Outdoor",             lifetimeHrs:  70000, recyclingCost: 0.60, installTimeHrs: 0.33, installTimeMin: 20, depthMin: 3,  depthMax:  6, widthMin:  7,   widthMax:  9,   lengthMin: 11,   lengthMax: 13,   diameterMin:  0, diameterMax:  0 } },
+    { record: "LED Flood Light 50W 5000K",           category: "fixtures", basePpu: 120, details: { style: "Flood",    mount: "Mounted",  lens: "Clear",     depth: "3",   width: "8",  length: "10", diameter: "",   application: "Outdoor",             lifetimeHrs:  50000, recyclingCost: 0.60, installTimeHrs: 0.33, installTimeMin: 20, depthMin: 2,  depthMax:  5, widthMin:  7,   widthMax:  9,   lengthMin:  9,   lengthMax: 11,   diameterMin:  0, diameterMax:  0 } },
+    { record: "LED Track Head 30W 3000K",            category: "fixtures", basePpu:  85, details: { style: "Track",    mount: "Track",    lens: "Clear",     depth: "5",   width: "4",  length: "7",  diameter: "",   application: "Indoor, Retail",      lifetimeHrs:  50000, recyclingCost: 0.35, installTimeHrs: 0.17, installTimeMin: 10, depthMin: 4,  depthMax:  7, widthMin:  3,   widthMax:  5,   lengthMin:  6,   lengthMax:  8,   diameterMin:  0, diameterMax:  0 } },
+  ];
 
-  for (let i = 0; i < 30; i++) {
-    const catIdx = i % productCategories.length;
-    const projectIdx = i % projects.length;
-    const reportIdx = projectIdx < reports.length ? projectIdx : 0;
-    const suEstIdx = i % suEstimateIds.length;
-    const userId = [suId, su2Id, su3Id, su4Id][i % 4];
-    const companyId = [companySU.id, companySU.id, companySU2.id, companySU3.id][i % 4];
+  const CONTROL_TPLS: ProdTpl[] = [
+    { record: "PIR Occupancy Sensor 360° Ceiling",      category: "control", basePpu:  45, details: { type: "Occupancy Sensor",    model: "PIR-360-C",  dimming: "On/Off", lifetimeHrs: 50000, recyclingCost: 0.50, installTimeHrs: 0.25, installTimeMin: 15 } },
+    { record: "Daylight Sensor 0-10V Photo Control",    category: "control", basePpu:  55, details: { type: "Daylight Sensor",      model: "DS-010V",    dimming: "0-10V",  lifetimeHrs: 50000, recyclingCost: 0.50, installTimeHrs: 0.20, installTimeMin: 12 } },
+    { record: "0-10V Dimmer Module 120/277V",           category: "control", basePpu:  42, details: { type: "Dimmer",               model: "DIM-010V",   dimming: "0-10V",  lifetimeHrs: 50000, recyclingCost: 0.40, installTimeHrs: 0.25, installTimeMin: 15 } },
+    { record: "7-Day Programmable Timer Control",       category: "control", basePpu:  35, details: { type: "Timer",                model: "TIMER-7D",   dimming: "On/Off", lifetimeHrs: 45000, recyclingCost: 0.50, installTimeHrs: 0.25, installTimeMin: 15 } },
+    { record: "Photocell Dusk-to-Dawn 120V",            category: "control", basePpu:  28, details: { type: "Photocell",            model: "PC-120V",    dimming: "On/Off", lifetimeHrs: 60000, recyclingCost: 0.30, installTimeHrs: 0.13, installTimeMin:  8 } },
+    { record: "Passive Infrared Motion Sensor Wall",    category: "control", basePpu:  38, details: { type: "Motion Sensor",        model: "PIR-WALL",   dimming: "On/Off", lifetimeHrs: 50000, recyclingCost: 0.40, installTimeHrs: 0.25, installTimeMin: 15 } },
+    { record: "DALI Controller 64-Channel",             category: "control", basePpu: 185, details: { type: "DALI Controller",      model: "DALI-64CH",  dimming: "DALI",   lifetimeHrs: 75000, recyclingCost: 1.00, installTimeHrs: 0.75, installTimeMin: 45 } },
+    { record: "Bluetooth Mesh Lighting Controller",     category: "control", basePpu:  95, details: { type: "Bluetooth Controller", model: "BT-MESH",    dimming: "0-10V",  lifetimeHrs: 50000, recyclingCost: 0.50, installTimeHrs: 0.33, installTimeMin: 20 } },
+    { record: "Wireless RF Dimmer 0-10V",               category: "control", basePpu:  65, details: { type: "Wireless Dimmer",      model: "RF-DIM",     dimming: "0-10V",  lifetimeHrs: 50000, recyclingCost: 0.40, installTimeHrs: 0.25, installTimeMin: 15 } },
+    { record: "Microwave Motion Sensor 360° Ceiling",   category: "control", basePpu:  52, details: { type: "Microwave Sensor",     model: "MW-360",     dimming: "On/Off", lifetimeHrs: 60000, recyclingCost: 0.40, installTimeHrs: 0.25, installTimeMin: 15 } },
+  ];
 
-    const [row] = await insert("product", [{
-      user_id: userId,
-      company_id: companyId,
-      project_id: projects[projectIdx].id,
-      report_id: reports[reportIdx].id,
-      estimate_su_id: suEstimateIds[suEstIdx],
-      airtable_record: productNames[catIdx],
-      airtable_base: "appFocusEarth2026",
-      airtable_colum_name: productCategories[catIdx],
-      details: {
-        productType: productTypes[catIdx],
-        pricePerUnit: pricePerUnits[catIdx],
-        wattage: String(10 + i * 2),
-        colorTemp: ["2700K", "3000K", "3500K", "4000K", "5000K"][i % 5],
-        manufacturer: ["Cree", "Philips", "GE", "Sylvania", "RAB"][i % 5],
-      },
-      created_at: monthsAgo(Math.floor(i / 5)),
-    }]);
-    productRows.push(row);
+  const POWER_SUPPLY_TPLS: ProdTpl[] = [
+    { record: "Constant Current LED Driver 350mA 40W", category: "power-supply", basePpu:  38, details: { type: "Constant Current",  model: "CC-350-40",   productCode: "CC350MA40W",  addedWattage: 2, lifetimeHrs: 50000, recyclingCost: 0.75, installTimeHrs: 0.17, installTimeMin: 10 } },
+    { record: "Constant Current LED Driver 700mA 50W", category: "power-supply", basePpu:  45, details: { type: "Constant Current",  model: "CC-700-50",   productCode: "CC700MA50W",  addedWattage: 2, lifetimeHrs: 50000, recyclingCost: 0.75, installTimeHrs: 0.17, installTimeMin: 10 } },
+    { record: "Constant Voltage LED Driver 12V 60W",   category: "power-supply", basePpu:  42, details: { type: "Constant Voltage",  model: "CV-12V-60",   productCode: "CV12V60W",    addedWattage: 3, lifetimeHrs: 50000, recyclingCost: 0.75, installTimeHrs: 0.17, installTimeMin: 10 } },
+    { record: "Constant Voltage LED Driver 24V 100W",  category: "power-supply", basePpu:  65, details: { type: "Constant Voltage",  model: "CV-24V-100",  productCode: "CV24V100W",   addedWattage: 4, lifetimeHrs: 50000, recyclingCost: 1.00, installTimeHrs: 0.20, installTimeMin: 12 } },
+    { record: "0-10V Dimmable LED Driver 40W",         category: "power-supply", basePpu:  48, details: { type: "0-10V Dimmable",   model: "DIM-010V-40", productCode: "DIM010V40W",  addedWattage: 2, lifetimeHrs: 50000, recyclingCost: 0.75, installTimeHrs: 0.20, installTimeMin: 12 } },
+    { record: "DALI Dimmable LED Driver 50W",          category: "power-supply", basePpu:  75, details: { type: "DALI Dimmable",    model: "DALI-50W",    productCode: "DALI50W",     addedWattage: 2, lifetimeHrs: 60000, recyclingCost: 1.00, installTimeHrs: 0.25, installTimeMin: 15 } },
+    { record: "Emergency LED Driver 10W 90min",        category: "power-supply", basePpu:  95, details: { type: "Emergency",        model: "EM-10-90",    productCode: "EM10W90M",    addedWattage: 0, lifetimeHrs: 50000, recyclingCost: 1.00, installTimeHrs: 0.25, installTimeMin: 15 } },
+    { record: "Emergency LED Driver 20W 90min",        category: "power-supply", basePpu: 125, details: { type: "Emergency",        model: "EM-20-90",    productCode: "EM20W90M",    addedWattage: 0, lifetimeHrs: 50000, recyclingCost: 1.00, installTimeHrs: 0.25, installTimeMin: 15 } },
+    { record: "Programmable LED Driver 75W",           category: "power-supply", basePpu:  85, details: { type: "Programmable",     model: "PROG-75W",    productCode: "PROG75W",     addedWattage: 3, lifetimeHrs: 75000, recyclingCost: 1.00, installTimeHrs: 0.33, installTimeMin: 20 } },
+    { record: "HID Replacement LED Driver 100W",       category: "power-supply", basePpu: 110, details: { type: "HID Replacement",  model: "HID-100W",    productCode: "HIDREPL100W", addedWattage: 5, lifetimeHrs: 50000, recyclingCost: 1.00, installTimeHrs: 0.33, installTimeMin: 20 } },
+  ];
+
+  const ACCESSORY_TPLS: ProdTpl[] = [
+    { record: "Surface Mount Kit 2x4 Panel",          category: "accessories", basePpu: 15, details: { typeA: "Mount Kit",            descriptionA: "Surface Mount Kit 2x4 Panel",           productCodeA: "SMK-2X4",     qtyA: "1", lifetimeHrs:     0, recyclingCost: 0.10, installTimeHrs: 0.17, installTimeMin: 10 } },
+    { record: "Pendant Mount Kit Adjustable 6ft",     category: "accessories", basePpu: 22, details: { typeA: "Mount Kit",            descriptionA: "Pendant Mount Kit Adjustable Cable 6ft", productCodeA: "PMK-ADJ6",    qtyA: "1", lifetimeHrs:     0, recyclingCost: 0.15, installTimeHrs: 0.20, installTimeMin: 12 } },
+    { record: "Protective Lens Cover Clear 2x4",      category: "accessories", basePpu: 18, details: { typeA: "Protective Lens Cover", descriptionA: "Protective Lens Cover Clear 2x4ft",      productCodeA: "PLC-CLR-2X4", qtyA: "1", lifetimeHrs: 30000, recyclingCost: 0.10, installTimeHrs: 0.08, installTimeMin:  5 } },
+    { record: "Protective Lens Cover Frosted 2x4",    category: "accessories", basePpu: 20, details: { typeA: "Protective Lens Cover", descriptionA: "Protective Lens Cover Frosted 2x4ft",    productCodeA: "PLC-FRS-2X4", qtyA: "1", lifetimeHrs: 30000, recyclingCost: 0.10, installTimeHrs: 0.08, installTimeMin:  5 } },
+    { record: "Wire Guard 4ft Linear Fixture",        category: "accessories", basePpu: 12, details: { typeA: "Wire Guard",           descriptionA: "Wire Guard 4ft for Linear Fixtures",     productCodeA: "WG-4FT",      qtyA: "1", lifetimeHrs:     0, recyclingCost: 0.20, installTimeHrs: 0.13, installTimeMin:  8 } },
+    { record: "Diffuser Lens Opal 2x4",               category: "accessories", basePpu: 25, details: { typeA: "Diffuser Lens",        descriptionA: "Diffuser Lens Opal 2x4ft",               productCodeA: "DL-OPL-2X4",  qtyA: "1", lifetimeHrs: 30000, recyclingCost: 0.10, installTimeHrs: 0.08, installTimeMin:  5 } },
+    { record: "PIR Occupancy Sensor Add-on Module",   category: "accessories", basePpu: 35, details: { typeA: "Sensor Add-on",        descriptionA: "PIR Occupancy Sensor Add-on Module",     productCodeA: "PIR-ADDON",   qtyA: "1", lifetimeHrs: 50000, recyclingCost: 0.30, installTimeHrs: 0.17, installTimeMin: 10 } },
+    { record: "Photocell Add-on Dusk-to-Dawn",        category: "accessories", basePpu: 20, details: { typeA: "Sensor Add-on",        descriptionA: "Photocell Add-on Dusk-to-Dawn 120V",     productCodeA: "PC-ADDON",    qtyA: "1", lifetimeHrs: 60000, recyclingCost: 0.20, installTimeHrs: 0.13, installTimeMin:  8 } },
+    { record: "Emergency Battery Pack 90min 10W",     category: "accessories", basePpu: 45, details: { typeA: "Emergency Battery",    descriptionA: "Emergency Battery Pack 90min 10W",       productCodeA: "EBP-10-90",   qtyA: "1", lifetimeHrs: 50000, recyclingCost: 1.00, installTimeHrs: 0.25, installTimeMin: 15 } },
+    { record: "Vandal Guard Steel 4ft",               category: "accessories", basePpu: 28, details: { typeA: "Vandal Guard",         descriptionA: "Vandal Guard Steel 4ft Linear",          productCodeA: "VG-STL-4FT",  qtyA: "1", lifetimeHrs:     0, recyclingCost: 0.25, installTimeHrs: 0.17, installTimeMin: 10 } },
+  ];
+
+  const ALL_TPLS: ProdTpl[] = [
+    ...LAMP_TPLS,
+    ...FIXTURE_TPLS,
+    ...CONTROL_TPLS,
+    ...POWER_SUPPLY_TPLS,
+    ...ACCESSORY_TPLS,
+  ];
+
+  // Supplier companies keep their specific manufacturer label and price tier.
+  const SUPPLIER_COMPANIES = [
+    { company: companySU,  userId: suId,  mfr: "BrightLED",  priceMult: 1.0 },
+    { company: companySU2, userId: su3Id, mfr: "EcoLux",     priceMult: 0.9 },
+    { company: companySU3, userId: su4Id, mfr: "NovaBright", priceMult: 1.1 },
+  ];
+
+  const suCompanyIds = new Set(SUPPLIER_COMPANIES.map((s) => s.company.id));
+
+  // Mirrors the individual build*Section helpers in LuminaireEditModal.tsx
+  function buildProductDescription(category: string, d: Record<string, unknown>, mfr: string): string {
+    const str = (v: unknown) => (v != null && v !== "" ? String(v) : "");
+    switch (category) {
+      case "lamp":
+        return [
+          "LED",
+          str(d.category),
+          str(d.type),
+          str(d.baseCategory),
+          str(d.baseCategoryType),
+          d.wattage       ? `${d.wattage}W`            : "",
+          d.colorTemperature ? `${d.colorTemperature}K` : "",
+          str(d.lensType),
+          str(d.productCode),
+        ].filter(Boolean).join(" ");
+      case "fixtures": {
+        const dims = [d.length, d.width, d.depth, d.diameter].map(str).filter(Boolean);
+        return [...(dims.length ? [dims.join("x")] : []), str(d.mount), str(d.style)]
+          .filter(Boolean).join(" ");
+      }
+      case "power-supply":
+        return [str(d.type), mfr, str(d.model), str(d.productCode)].filter(Boolean).join(" ");
+      case "control":
+        return [str(d.type), mfr, str(d.dimming), str(d.model)].filter(Boolean).join(" ");
+      case "accessories":
+        return [str(d.typeA), mfr, str(d.productCodeA)].filter(Boolean).join(" ");
+      default:
+        return "";
+    }
   }
-  console.log(`  ✓ ${productRows.length} products`);
+
+  const productRows: any[] = [];
+
+  function makeProductBatch(
+    tpls: ProdTpl[],
+    companyId: number,
+    userId: string,
+    mfr: string,
+    priceMult: number,
+  ) {
+    return tpls.map((tpl) => {
+      const ppu = Math.round(tpl.basePpu * priceMult * 100) / 100;
+      const description = buildProductDescription(tpl.category, tpl.details, mfr);
+      return {
+        user_id:             userId,
+        company_id:          companyId,
+        project_id:          null,
+        report_id:           null,
+        estimate_su_id:      null,
+        airtable_record:     tpl.record,
+        airtable_base:       "appFocusEarth2026",
+        airtable_colum_name: tpl.category,
+        is_existing:         false,
+        details: { ...tpl.details, manufacturer: mfr, pricePerUnit: String(ppu), ppu, description },
+        created_at:          monthsAgo(2),
+      };
+    });
+  }
+
+  // SU companies — preserve existing manufacturer labels and pricing
+  for (const { company, userId, mfr, priceMult } of SUPPLIER_COMPANIES) {
+    const inserted = await insert("product", makeProductBatch(ALL_TPLS, company.id, userId, mfr, priceMult));
+    productRows.push(...inserted);
+    console.log(`  ✓ ${inserted.length} products → ${company.name}`);
+  }
+
+  // All remaining companies (REU, EU) — also get 50 products each
+  const OTHER_PRICE_MULTS = [1.0, 0.95, 1.05, 0.9, 1.1, 0.85, 1.15];
+  const otherCompanies = allCompanies.filter((c: any) => !suCompanyIds.has(c.id));
+  for (let i = 0; i < otherCompanies.length; i++) {
+    const company = otherCompanies[i];
+    const priceMult = OTHER_PRICE_MULTS[i % OTHER_PRICE_MULTS.length];
+    const inserted = await insert("product", makeProductBatch(ALL_TPLS, company.id, company.owner_id, company.name, priceMult));
+    productRows.push(...inserted);
+    console.log(`  ✓ ${inserted.length} products → ${company.name}`);
+  }
+
+  console.log(`  ✓ ${productRows.length} products total (${ALL_TPLS.length} per company × ${allCompanies.length} companies)`);
 
   // ── 8. Activities ──────────────────────────────────────────────────────
   console.log("\nSeeding activities...");

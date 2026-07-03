@@ -32,15 +32,16 @@ interface ProductFilters {
   reportId?: number;
   category?: string;
   search?: string;
+  isExisting?: boolean;
   page?: number;
   pageSize?: number;
 }
 
 export function useProducts(filters: ProductFilters = {}) {
-  const { companyId, projectId, reportId, category, search, page = 1, pageSize = 20 } = filters;
+  const { companyId, projectId, reportId, category, search, isExisting, page = 1, pageSize = 20 } = filters;
 
   return useQuery({
-    queryKey: ['products', { companyId, projectId, reportId, category, search, page, pageSize }],
+    queryKey: ['products', { companyId, projectId, reportId, category, search, isExisting, page, pageSize }],
     queryFn: async () => {
       if (search) {
         const categoryParam = category === 'all-products' ? null : (category ?? null);
@@ -49,6 +50,7 @@ export function useProducts(filters: ProductFilters = {}) {
           p_category: categoryParam,
           p_page: page,
           p_page_size: pageSize,
+          ...(isExisting !== undefined && { p_is_existing: isExisting }),
         });
 
         if (error) throw error;
@@ -60,6 +62,7 @@ export function useProducts(filters: ProductFilters = {}) {
       if (projectId) filterObj.project_id = projectId;
       if (reportId) filterObj.report_id = reportId;
       if (category && category !== 'all-products') filterObj.category = category;
+      if (isExisting !== undefined) filterObj.is_existing = isExisting;
 
       const { data, error } = await supabase.rpc('fn_list_products', {
         p_filters: filterObj as never,
@@ -103,6 +106,7 @@ export function useCreateProduct() {
       airtableColumName: string;
       estimateSuId?: number;
       details?: ProductDetails;
+      isExisting?: boolean;
     }) => {
       const { data, error } = await supabase.rpc('fn_create_product', {
         p_user_id: params.userId,
@@ -114,6 +118,7 @@ export function useCreateProduct() {
         p_airtable_colum_name: params.airtableColumName,
         p_estimate_su_id: params.estimateSuId ?? null,
         p_details: (params.details ?? {}) as never,
+        p_is_existing: params.isExisting ?? false,
       });
 
       if (error) throw error;
