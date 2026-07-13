@@ -586,6 +586,7 @@ export interface ShippingDetail {
 export interface ProductDetails {
   // ── General ─────────────────────────────────────────────
   description?: string;
+  isCustomPrice?: boolean;
   supplier?: string;
   productType?: string;
   type?: string;
