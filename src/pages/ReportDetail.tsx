@@ -17,9 +17,20 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { useReport, useApproveReport } from '@/hooks/use-reports';
 import { useProject } from '@/hooks/use-projects';
+import { useCompany } from '@/hooks/use-companies';
+import { useUser } from '@/hooks/use-users';
 import type { ReportCalculationResult } from '@/lib/report-calculator';
 import { buildLuminaireSummary } from '@/lib/formatters';
 import { useAuth } from '@/hooks/useAuth';
+import { ReportPDFCapture } from '@/components/reports/ReportPDFCapture';
+import { CoverPagePDF } from '@/components/reports/CoverPagePDF';
+import { TableOfContentsPDF } from '@/components/reports/TableOfContentsPDF';
+import { ExecutiveSummaryPDF } from '@/components/reports/ExecutiveSummaryPDF';
+import { InvestmentOverviewPDF } from '@/components/reports/InvestmentOverviewPDF';
+import { EnergyPDF } from '@/components/reports/EnergyPDF';
+import { EcoIncentivePDF } from '@/components/reports/EcoIncentivePDF';
+import { LuminairesPDF } from '@/components/reports/LuminairesPDF';
+import { FinancingPDF } from '@/components/reports/FinancingPDF';
 import {
   ChevronDown,
   Download,
@@ -212,9 +223,12 @@ export default function ReportDetail() {
   const [activeTab, setActiveTab] = useState<string>('investment');
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [calc, setCalc] = useState<ReportCalculationResult | null>(null);
+  const [pdfDownload, setPdfDownload] = useState(false);
 
   const { data,    isLoading } = useReport(reportId);
   const { data: project }      = useProject(projectIdNum);
+  const { data: company }      = useCompany(project?.company_id ?? undefined);
+  const { data: reuUser }      = useUser(project?.user_id ?? undefined);
   const approveMutation        = useApproveReport();
 
   // Auto-calculate via edge function on every page visit
@@ -255,7 +269,7 @@ export default function ReportDetail() {
     );
   }
 
-  const { report } = data;
+  const { report, created_by: reportCreatedBy } = data;
 
   // ── Derived values ────────────────────────────────────────────────────────
 
@@ -288,6 +302,29 @@ export default function ReportDetail() {
     { label: 'Installation:',       value: '$0' },
     { label: 'Project Total:',      value: projectTotal  ? fmt$(projectTotal)                  : '—', highlight: true },
   ];
+
+  // ── Report PDF footer/cover values ────────────────────────────────────────
+  const pdfCompanyName = company?.name ?? 'Focus Earth Real Estate';
+  const pdfCreatedBy = `${reportCreatedBy.first_name} ${reportCreatedBy.last_name}`.trim();
+  const pdfProjectCityStateZip = [project?.city, [project?.state, project?.zip_code].filter(Boolean).join(' ')]
+    .filter(Boolean)
+    .join(', ');
+  const pdfReuUserName = `${reuUser?.first_name ?? ''} ${reuUser?.last_name ?? ''}`.trim();
+  const pdfEnergyReductionPct = calc
+    ? Math.round((parseFloat(calc.energySaved.replace(/,/g, '')) / parseFloat(calc.existingSystem.replace(/,/g, ''))) * 100)
+    : 0;
+  const pdfPriorities = (project?.property_priorities ?? null) as Record<string, number> | null;
+
+  const pdfToc = {
+    tableOfContents:    { title: 'Table Of Contents',     page: 1 },
+    executiveSummary:   { title: 'Executive Summary',     page: 2 },
+    investmentOverview: { title: 'Investment Overview',   page: 3 },
+    energy:              { title: 'Energy Analysis',      page: 4 },
+    ecoIncentive:         { title: 'Eco Incentive',         page: 5 },
+    luminaires:           { title: 'Luminaire Upgrades',    page: 6 },
+    financing:            { title: 'Financing Estimates',   page: 7 },
+    companyHighlights:  { title: 'Company Highlights',    page: 8 },
+  };
 
   // ── Investment highlights ──────────────────────────────────────────────────
   const highlights: { label: string; value: string; bg: string }[] = [
@@ -604,7 +641,6 @@ export default function ReportDetail() {
                       <button
                         type="button"
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                        onClick={() => setDownloadOpen(false)}
                       >
                         <Download className="h-4 w-4 shrink-0 text-gray-500" />
                         Download PDF
@@ -612,7 +648,6 @@ export default function ReportDetail() {
                       <button
                         type="button"
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                        onClick={() => setDownloadOpen(false)}
                       >
                         <Printer className="h-4 w-4 shrink-0 text-gray-500" />
                         Print PDF
@@ -623,7 +658,7 @@ export default function ReportDetail() {
                       <button
                         type="button"
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                        onClick={() => setDownloadOpen(false)}
+                        onClick={() => setPdfDownload(true)}
                       >
                         <CloudDownload className="h-4 w-4 shrink-0 text-gray-500" />
                         Energy Report
@@ -631,7 +666,6 @@ export default function ReportDetail() {
                       <button
                         type="button"
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                        onClick={() => setDownloadOpen(false)}
                       >
                         <CloudDownload className="h-4 w-4 shrink-0 text-gray-500" />
                         Specifications
@@ -639,7 +673,6 @@ export default function ReportDetail() {
                       <button
                         type="button"
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                        onClick={() => setDownloadOpen(false)}
                       >
                         <Printer className="h-4 w-4 shrink-0 text-gray-500" />
                         Print PDF
@@ -1485,6 +1518,77 @@ export default function ReportDetail() {
           </div>
         )}
       </div>
+
+      {pdfDownload && (
+        <ReportPDFCapture
+          fileName={`${project.title}_${report.proposal_name || reportId}.pdf`}
+          onDone={() => setPdfDownload(false)}
+        >
+          <CoverPagePDF
+            companyName={pdfCompanyName}
+            proposalName={report.proposal_name}
+            projectAddress={project?.address ?? ''}
+            projectCityStateZip={pdfProjectCityStateZip}
+            createdBy={pdfCreatedBy}
+          />
+          <TableOfContentsPDF
+            companyName={pdfCompanyName}
+            pageNumber={pdfToc.tableOfContents.page}
+            entries={Object.values(pdfToc)}
+          />
+          <ExecutiveSummaryPDF
+            companyName={pdfCompanyName}
+            pageNumber={pdfToc.executiveSummary.page}
+            reuUserName={pdfReuUserName}
+            projectAddress={project?.address ?? ''}
+            energyReductionPct={pdfEnergyReductionPct}
+            lumensImprovementPct={calc?.lumensGlobal ?? 0}
+            criImprovementPct={calc?.criGlobal ?? 0}
+            priorities={pdfPriorities}
+          />
+          <InvestmentOverviewPDF
+            companyName={pdfCompanyName}
+            pageNumber={pdfToc.investmentOverview.page}
+            highlights={highlights}
+            pricingRows={pricingRows}
+            paybackData={paybackData}
+            projectedSavings={projectedSavings}
+          />
+          <EnergyPDF
+            companyName={pdfCompanyName}
+            pageNumber={pdfToc.energy.page}
+            comparisonCols={ENERGY_COMPARISON_COLS}
+            energyConsumption={energyConsumption}
+            energyComparison={energyComparison}
+            consumptionData={consumptionData}
+            expenditureRows={expenditureRows}
+          />
+          <EcoIncentivePDF
+            companyName={pdfCompanyName}
+            pageNumber={pdfToc.ecoIncentive.page}
+            comparisonCols={ENERGY_COMPARISON_COLS}
+            ecoRows={ecoRows}
+            humanElementData={humanElementData}
+            criImprovement={criImprovement}
+            lumenImprovement={lumenImprovement}
+            preciousTimeRows={preciousTimeRows}
+          />
+          <LuminairesPDF
+            companyName={pdfCompanyName}
+            pageNumber={pdfToc.luminaires.page}
+            allLuminaires={allLuminaires}
+            luminaireAreas={luminaireAreas}
+          />
+          <FinancingPDF
+            companyName={pdfCompanyName}
+            pageNumber={pdfToc.financing.page}
+            comparisonCols={ENERGY_COMPARISON_COLS}
+            financingLeft={FINANCING_LEFT}
+            financingRows={FINANCING_TABLE_ROWS}
+            financingForecastData={FINANCING_FORECAST_DATA}
+          />
+        </ReportPDFCapture>
+      )}
     </DashboardLayout>
   );
 }
