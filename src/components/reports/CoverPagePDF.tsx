@@ -10,7 +10,7 @@ export interface CoverPagePDFProps {
   createdBy: string;
 }
 
-// Reduced legacy logo and title sizing to prevent 2-line titles from overlapping the hills; verified clearance using HILLS_HEIGHT_PX.
+// Reduced logo/title sizing so 2-line titles clear the hills — see HILLS_HEIGHT_PX.
 const LOGO_TOP_OFFSET_PX = 90;
 const LOGO_WIDTH_PX = 650;
 const LOGO_HEIGHT_PX = Math.round(LOGO_WIDTH_PX * (231 / 655));

@@ -32,7 +32,11 @@ import { EcoIncentivePDF } from '@/components/reports/EcoIncentivePDF';
 import { LuminairesPDF, useLuminairesPagination } from '@/components/reports/LuminairesPDF';
 import { FinancingPDF } from '@/components/reports/FinancingPDF';
 import { CompanyHighlightsPDF } from '@/components/reports/CompanyHighlightsPDF';
-import { formatNumber2, formatCurrency2 } from '@/components/reports/pdfLayout';
+import { SpecificationsCoverPDF } from '@/components/reports/SpecificationsCoverPDF';
+import { TechnicalInfoPDF } from '@/components/reports/TechnicalInfoPDF';
+import type { ComponentLabel, TechnicalSpecPage } from '@/components/reports/TechnicalInfoPDF';
+import type { ProductDetails } from '@/types/database';
+import { formatNumber2, formatCurrency2, formatDownloadDate } from '@/components/reports/pdfLayout';
 import {
   ChevronDown,
   Download,
@@ -224,6 +228,7 @@ export default function ReportDetail() {
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [calc, setCalc] = useState<ReportCalculationResult | null>(null);
   const [pdfAction, setPdfAction] = useState<'download' | 'print' | null>(null);
+  const [specAction, setSpecAction] = useState<'download' | 'print' | null>(null);
 
   const { data,    isLoading } = useReport(reportId);
   const { data: project }      = useProject(projectIdNum);
@@ -242,7 +247,7 @@ export default function ReportDetail() {
       });
   }, [reportId]);
 
-  // Computed here (before the loading/not-found guards below) so useLuminairesPagination, a hook, can be called unconditionally on every render.
+  // Computed before the loading/not-found guards so useLuminairesPagination can be called unconditionally.
   type AreaRow = {
     name: string;
     ceilingHeight: string;
@@ -257,7 +262,7 @@ export default function ReportDetail() {
     luminaires: LuminairePair[];
   };
 
-  // Memoized so the array reference only changes when the underlying data does — useLuminairesPagination's effect depends on it, and an unmemoized recompute-every-render array would re-trigger that effect (and its setState) on every render, causing an infinite loop.
+  // Memoized so the reference stays stable — otherwise it retriggers useLuminairesPagination's effect every render.
   const luminaireAreas: AreaRow[] = useMemo(() => {
   const proposalItems = Array.isArray(data?.report.proposal) ? (data!.report.proposal as Record<string, unknown>[]) : [];
 
@@ -307,8 +312,7 @@ export default function ReportDetail() {
           accessoryDescriptionA:  String(ae?.description     ?? l.accessoryDescriptionA   ?? ''),
         }) || '—';
 
-        // Recommended — check 'description' (seeded products) then component-specific keys
-        // (manually-created products may store the label in fixtureDescription, lampDescription, etc.)
+        // Recommended — tries 'description' first, falls back to fields like fixtureDescription.
         const desc = (obj: unknown, ...altKeys: string[]): string => {
           if (!obj || typeof obj !== 'object') return '';
           const o = obj as Record<string, unknown>;
@@ -337,9 +341,45 @@ export default function ReportDetail() {
   });
   }, [project, data]);
 
+  // Every luminaire occurrence's recommended components become their own spec-sheet page — no dedup across areas.
+  const technicalSpecPages: TechnicalSpecPage[] = useMemo(() => {
+    const proposalItems = Array.isArray(data?.report.proposal) ? (data!.report.proposal as Record<string, unknown>[]) : [];
+    const pages: TechnicalSpecPage[] = [];
+
+    (project?.areas ?? []).forEach((area, aIdx) => {
+      const a = area as Record<string, unknown>;
+      const areaTitle = (a.title ?? a.name ?? '') as string;
+      const proposalArea = (
+        proposalItems.find((p) => (p.title as string) === areaTitle) ??
+        proposalItems[aIdx] ??
+        {}
+      ) as Record<string, unknown>;
+      const proposalLums = Array.isArray(proposalArea.luminaires)
+        ? (proposalArea.luminaires as Record<string, unknown>[])
+        : [];
+
+      proposalLums.forEach((pl) => {
+        const components: [ComponentLabel, unknown][] = [
+          ['Fixture', pl.fixtureRecommended],
+          ['Lamp', pl.lampRecommended],
+          ['Power Supply', pl.powerSupplyRecommended],
+          ['Control', pl.controlRecommended],
+          ['Accessory', pl.accessoryRecommended],
+        ];
+        components.forEach(([componentLabel, details]) => {
+          if (details && typeof details === 'object' && Object.keys(details).length > 0) {
+            pages.push({ componentLabel, details: details as ProductDetails });
+          }
+        });
+      });
+    });
+
+    return pages;
+  }, [project, data]);
+
   const allLuminaires = useMemo(() => luminaireAreas.flatMap((a) => a.luminaires), [luminaireAreas]);
 
-  // Off-screen measure + paginate Luminaires content now, before the guards below, so the real page count is known in time for pdfToc.
+  // Measured off-screen now so the real page count is known before pdfToc is built.
   const { pages: luminairePages, measurer: luminairesMeasurer } = useLuminairesPagination(allLuminaires, luminaireAreas);
 
   // ── Loading ───────────────────────────────────────────────────────────────
@@ -417,7 +457,7 @@ export default function ReportDetail() {
     : 0;
   const pdfPriorities = (project?.property_priorities ?? null) as Record<string, number> | null;
 
-  // Luminaires can span more than one page, so everything after it is numbered off its real page count instead of a hardcoded +1.
+  // Luminaires can span multiple pages, so later pages are numbered off its real count, not a hardcoded +1.
   const luminairePageCount = luminairePages?.length || 1;
   const financingPage = 6 + luminairePageCount;
 
@@ -679,6 +719,7 @@ export default function ReportDetail() {
                       <button
                         type="button"
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        onClick={() => setSpecAction('download')}
                       >
                         <CloudDownload className="h-4 w-4 shrink-0 text-gray-500" />
                         Specifications
@@ -1537,7 +1578,7 @@ export default function ReportDetail() {
 
       {pdfAction && (
         <ReportPDFCapture
-          fileName={`${project.title}_${report.proposal_name || reportId}.pdf`}
+          fileName={`${project.title}_${report.proposal_name}_${formatDownloadDate(new Date())}_Energy Report.pdf`}
           mode={pdfAction}
           onDone={() => setPdfAction(null)}
         >
@@ -1606,6 +1647,26 @@ export default function ReportDetail() {
           <CompanyHighlightsPDF
             companyName={pdfCompanyName}
             pageNumber={pdfToc.companyHighlights.page}
+          />
+        </ReportPDFCapture>
+      )}
+
+      {specAction && (
+        <ReportPDFCapture
+          fileName={`${project.title}_${report.proposal_name}_${formatDownloadDate(new Date())}_Specification Report.pdf`}
+          mode={specAction}
+          onDone={() => setSpecAction(null)}
+        >
+          <SpecificationsCoverPDF
+            companyName={pdfCompanyName}
+            proposalName={report.proposal_name}
+            projectAddress={project?.address ?? ''}
+            projectCityStateZip={pdfProjectCityStateZip}
+          />
+          <TechnicalInfoPDF
+            companyName={pdfCompanyName}
+            basePageNumber={2}
+            pages={technicalSpecPages}
           />
         </ReportPDFCapture>
       )}

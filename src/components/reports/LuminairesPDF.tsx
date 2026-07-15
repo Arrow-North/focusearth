@@ -25,7 +25,7 @@ interface LuminaireAreaRow {
 // Matches ReportPDFPage's p-10 (40px each side) so measured widths equal rendered widths.
 const CONTENT_WIDTH_PX = PAGE_WIDTH_PX - 80;
 
-// Static print version of the live tab's LumRow — no Print/Download buttons, since those are interactive UI chrome with no meaning in a static document.
+// Static print version of the live tab's LumRow — no Print/Download buttons, they're interactive UI chrome.
 function LumRow({ pair }: { pair: LuminairePair }) {
   return (
     <div className="grid grid-cols-2 gap-4" style={{ paddingBottom: 16 }}>
@@ -103,7 +103,7 @@ function AreaHeaderBlock({ area }: { area: LuminaireAreaRow }) {
   );
 }
 
-// One indivisible chunk of content — never split across a page break. A lead block (a section header) is always kept glued to the block right after it, so a heading never ends up alone at the bottom of a page.
+// One indivisible chunk — a lead block (header) stays glued to the block after it, never orphaned at a page bottom.
 interface LuminaireBlock {
   key: string;
   lead: boolean;
@@ -128,7 +128,7 @@ function buildBlocks(allLuminaires: readonly LuminairePair[], luminaireAreas: re
   return blocks;
 }
 
-// Greedily fills each page in order; when a block (or a lead block plus the block it's glued to) no longer fits, it starts a new page instead.
+// Greedily fills each page; starts a new one once the next block (or glued pair) no longer fits.
 function paginateBlocks(blocks: LuminaireBlock[], heights: Map<string, number>, budgetPx: number): LuminaireBlock[][] {
   const pages: LuminaireBlock[][] = [[]];
   let used = 0;
@@ -146,7 +146,7 @@ function paginateBlocks(blocks: LuminaireBlock[], heights: Map<string, number>, 
   return pages;
 }
 
-/** Measures Luminaires content off-screen and splits it into as many pages as it actually needs — re-measures whenever the data changes, never guesses a fixed row budget. */
+/** Measures Luminaires content off-screen and splits it into as many pages as it actually needs. */
 export function useLuminairesPagination(allLuminaires: readonly LuminairePair[], luminaireAreas: readonly LuminaireAreaRow[]) {
   const blocks = buildBlocks(allLuminaires, luminaireAreas);
   const blockRefs = useRef(new Map<string, HTMLDivElement | null>());

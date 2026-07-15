@@ -16,7 +16,7 @@ const BORDER_COLOR = '#F3F3F3';
 const ICON_WIDTH_PX = Math.round(50 * LEGACY_PX_RATIO); // legacy: icon width: 50px
 const COL_BORDER_PX = Math.round(1 * LEGACY_PX_RATIO); // legacy: column border: 1px
 
-// Static marketing copy, no report data — 6 columns across 2 rows, all sharing the same top padding so icon/title/body line up across each row.
+// Static marketing copy — 6 columns, 2 rows, same top padding so content aligns across each row.
 const HIGHLIGHTS = [
   {
     icon: IconMission, title: 'Mission',
