@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { ReportPDFPage } from './ReportPDFPage';
+import { formatCurrency2 } from './pdfLayout';
 
 export interface FinancingPDFProps {
   companyName: string;
@@ -18,7 +19,7 @@ export interface FinancingPDFProps {
   financingForecastData: readonly { year: number; existing: number; financed: number; paid: number }[];
 }
 
-const formatYAxis = (value: number) => (value === 0 ? '$0' : `$${value.toLocaleString()}`);
+const formatYAxis = (value: number) => formatCurrency2(value);
 const Y_DOMAIN_MAX = 400000;
 const Y_TICKS = [0, 50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000];
 
@@ -85,7 +86,7 @@ export function FinancingPDF({
                         style={{ backgroundColor: row.bg }}
                         className={`block w-full text-center py-3 text-gray-800 ${row.bold ? 'font-bold' : 'font-medium'}`}
                       >
-                        ${val.toLocaleString()}
+                        {formatCurrency2(val)}
                       </span>
                     </td>
                   ))}
@@ -132,7 +133,7 @@ export function FinancingPDF({
               width={75}
             />
             <Tooltip
-              formatter={(value: number) => [`$${value.toLocaleString()}`, undefined]}
+              formatter={(value: number) => [formatCurrency2(value), undefined]}
               labelFormatter={(label) => `Year ${label}`}
             />
             <Line type="linear" dataKey="existing" name="Existing System"        stroke="#e53e3e" strokeWidth={3} dot={{ r: 4, fill: '#e53e3e', strokeWidth: 0 }} />

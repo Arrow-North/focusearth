@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -29,8 +29,10 @@ import { ExecutiveSummaryPDF } from '@/components/reports/ExecutiveSummaryPDF';
 import { InvestmentOverviewPDF } from '@/components/reports/InvestmentOverviewPDF';
 import { EnergyPDF } from '@/components/reports/EnergyPDF';
 import { EcoIncentivePDF } from '@/components/reports/EcoIncentivePDF';
-import { LuminairesPDF } from '@/components/reports/LuminairesPDF';
+import { LuminairesPDF, useLuminairesPagination } from '@/components/reports/LuminairesPDF';
 import { FinancingPDF } from '@/components/reports/FinancingPDF';
+import { CompanyHighlightsPDF } from '@/components/reports/CompanyHighlightsPDF';
+import { formatNumber2, formatCurrency2 } from '@/components/reports/pdfLayout';
 import {
   ChevronDown,
   Download,
@@ -64,8 +66,7 @@ const PAYBACK_DATA = [
   { year: 9, existing: 350000, led: 43000 },
 ];
 
-const formatYAxis = (value: number) =>
-  value === 0 ? '$0' : `$${value.toLocaleString()}`;
+const formatYAxis = (value: number) => formatCurrency2(value);
 
 const CHART_MARGIN = { top: 10, right: 20, left: 0, bottom: 35 } as const;
 const Y_DOMAIN_MAX = 400000;
@@ -80,8 +81,7 @@ const CONSUMPTION_DATA = [
   { year: 10, existing: 6351000, led: 2628000 },
 ];
 
-const formatConsumptionY = (value: number) =>
-  value === 0 ? '0' : value.toLocaleString();
+const formatConsumptionY = (value: number) => formatNumber2(value);
 
 // Energy tab dummy data
 const ENERGY_CONSUMPTION = [
@@ -223,7 +223,7 @@ export default function ReportDetail() {
   const [activeTab, setActiveTab] = useState<string>('investment');
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [calc, setCalc] = useState<ReportCalculationResult | null>(null);
-  const [pdfDownload, setPdfDownload] = useState(false);
+  const [pdfAction, setPdfAction] = useState<'download' | 'print' | null>(null);
 
   const { data,    isLoading } = useReport(reportId);
   const { data: project }      = useProject(projectIdNum);
@@ -241,6 +241,106 @@ export default function ReportDetail() {
         queryClient.invalidateQueries({ queryKey: ['report', reportId] });
       });
   }, [reportId]);
+
+  // Computed here (before the loading/not-found guards below) so useLuminairesPagination, a hook, can be called unconditionally on every render.
+  type AreaRow = {
+    name: string;
+    ceilingHeight: string;
+    dailyUsage: string;
+    controlType: string;
+    application: string;
+    voltage: string;
+    areaSqFt: string;
+    installationSurface: string;
+    ingressProtection: string;
+    notes: string;
+    luminaires: LuminairePair[];
+  };
+
+  // Memoized so the array reference only changes when the underlying data does — useLuminairesPagination's effect depends on it, and an unmemoized recompute-every-render array would re-trigger that effect (and its setState) on every render, causing an infinite loop.
+  const luminaireAreas: AreaRow[] = useMemo(() => {
+  const proposalItems = Array.isArray(data?.report.proposal) ? (data!.report.proposal as Record<string, unknown>[]) : [];
+
+  return (project?.areas ?? []).map((area, aIdx) => {
+    const a = area as Record<string, unknown>;
+    const areaTitle = (a.title ?? a.name ?? '') as string;
+
+    // Match by title first (proposal areas may not be in the same order as project areas)
+    const proposalArea = (
+      proposalItems.find((p) => (p.title as string) === areaTitle) ??
+      proposalItems[aIdx] ??
+      {}
+    ) as Record<string, unknown>;
+
+    const proposalLums = Array.isArray(proposalArea.luminaires)
+      ? (proposalArea.luminaires as Record<string, unknown>[])
+      : [];
+
+    return {
+      name:                areaTitle || `Area ${aIdx + 1}`,
+      ceilingHeight:       (a.ceilingHeight || a.ceiling_height || '—') as string,
+      dailyUsage:          (a.dailyUsage    || a.daily_usage    || '—') as string,
+      controlType:         (a.controlType   || a.control_type   || '—') as string,
+      application:         (a.application                       || '—') as string,
+      voltage:             (a.voltage                           || '—') as string,
+      areaSqFt:            (a.areaSqFt      || a.area_sqft      || '—') as string,
+      installationSurface: (a.installationSurface || a.installation_surface || '—') as string,
+      ingressProtection:   (a.ingressProtection   || a.ingress_protection   || '—') as string,
+      notes:               (a.notes                            || '—') as string,
+      luminaires: (area.luminaires ?? []).map((lum, lIdx): LuminairePair => {
+        const l  = lum as Record<string, unknown>;
+        const pl = (proposalLums[lIdx] ?? {}) as Record<string, unknown>;
+
+        // Existing — prefer proposal *Existing objects, fall back to flat luminaire fields
+        const fe = pl.fixtureExisting     as Record<string, unknown> | null | undefined;
+        const le = pl.lampExisting        as Record<string, unknown> | null | undefined;
+        const pe = pl.powerSupplyExisting as Record<string, unknown> | null | undefined;
+        const ce = pl.controlExisting     as Record<string, unknown> | null | undefined;
+        const ae = pl.accessoryExisting   as Record<string, unknown> | null | undefined;
+
+        const existing = buildLuminaireSummary({
+          fixtureDescription:     String(fe?.description     ?? l.fixtureDescription     ?? ''),
+          lampPerFixture:         String(pl.lampPerFixture   ?? l.lampPerFixture          ?? ''),
+          lampDescription:        String(le?.description     ?? l.lampDescription         ?? ''),
+          powerSupplyDescription: String(pe?.description     ?? l.powerSupplyDescription  ?? ''),
+          controlDescription:     String(ce?.description     ?? l.controlDescription      ?? ''),
+          accessoryDescriptionA:  String(ae?.description     ?? l.accessoryDescriptionA   ?? ''),
+        }) || '—';
+
+        // Recommended — check 'description' (seeded products) then component-specific keys
+        // (manually-created products may store the label in fixtureDescription, lampDescription, etc.)
+        const desc = (obj: unknown, ...altKeys: string[]): string => {
+          if (!obj || typeof obj !== 'object') return '';
+          const o = obj as Record<string, unknown>;
+          for (const key of ['description', ...altKeys]) {
+            if (o[key] != null && o[key] !== '') return String(o[key]);
+          }
+          return '';
+        };
+
+        const recParts: string[] = [];
+        const fix = desc(pl.fixtureRecommended, 'fixtureDescription');
+        const lam = desc(pl.lampRecommended,     'lampDescription');
+        const lpf = String(pl.lampPerFixture ?? '');
+        const pow = desc(pl.powerSupplyRecommended, 'powerSupplyDescription');
+        const ctl = desc(pl.controlRecommended,     'controlDescription');
+        const acc = desc(pl.accessoryRecommended,   'accessoryDescriptionA');
+        if (fix) recParts.push(fix);
+        if (lam) recParts.push(lpf ? `(${lpf}) ${lam}` : lam);
+        if (pow) recParts.push(`powered by ${pow}`);
+        if (ctl) recParts.push(`controlled by ${ctl}`);
+        if (acc) recParts.push(`with ${acc}`);
+
+        return { existing, recommended: recParts.join(', ') || '—' };
+      }),
+    };
+  });
+  }, [project, data]);
+
+  const allLuminaires = useMemo(() => luminaireAreas.flatMap((a) => a.luminaires), [luminaireAreas]);
+
+  // Off-screen measure + paginate Luminaires content now, before the guards below, so the real page count is known in time for pdfToc.
+  const { pages: luminairePages, measurer: luminairesMeasurer } = useLuminairesPagination(allLuminaires, luminaireAreas);
 
   // ── Loading ───────────────────────────────────────────────────────────────
 
@@ -282,8 +382,10 @@ export default function ReportDetail() {
   })();
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  const fmt$ = (n: number) => `$${n.toLocaleString()}`;
-  const fmtN = (n: number) => n.toLocaleString();
+  const fmt$ = (n: number) => formatCurrency2(n);
+  const fmtN = (n: number) => formatNumber2(n);
+  // Formats a raw DB field that may be null or a non-numeric string, unlike fmtN which assumes a real number.
+  const fmtRaw = (n: unknown) => (n != null && n !== '' && !isNaN(Number(n)) ? formatNumber2(Number(n)) : '—');
 
   // ── Pricing rows (prefer calculated values, fall back to report fields) ───
   const ledLuminaires   = calc?.ledLuminaires   ?? Number(report.led_price   ?? 0);
@@ -296,10 +398,10 @@ export default function ReportDetail() {
   const pricingRows: { label: string; value: string; highlight?: boolean }[] = [
     { label: 'LED Luminaires:',     value: ledLuminaires ? fmt$(ledLuminaires)                 : 'TBD' },
     { label: 'Rebates:',            value: rebates       ? fmt$(rebates)                       : 'TBD' },
-    { label: 'Light Count Waiver:', value: lcWaiver      ? `(${fmt$(lcWaiver)})`               : '$0'  },
-    { label: 'Sales Tax:',          value: salesTax      ? fmt$(salesTax)                      : '$0'  },
+    { label: 'Light Count Waiver:', value: lcWaiver      ? `(${fmt$(lcWaiver)})`               : '$0.00'  },
+    { label: 'Sales Tax:',          value: salesTax      ? fmt$(salesTax)                      : '$0.00'  },
     { label: 'Shipping:',           value: shipping      ? fmt$(shipping)                      : 'TBD' },
-    { label: 'Installation:',       value: '$0' },
+    { label: 'Installation:',       value: '$0.00' },
     { label: 'Project Total:',      value: projectTotal  ? fmt$(projectTotal)                  : '—', highlight: true },
   ];
 
@@ -315,6 +417,10 @@ export default function ReportDetail() {
     : 0;
   const pdfPriorities = (project?.property_priorities ?? null) as Record<string, number> | null;
 
+  // Luminaires can span more than one page, so everything after it is numbered off its real page count instead of a hardcoded +1.
+  const luminairePageCount = luminairePages?.length || 1;
+  const financingPage = 6 + luminairePageCount;
+
   const pdfToc = {
     tableOfContents:    { title: 'Table Of Contents',     page: 1 },
     executiveSummary:   { title: 'Executive Summary',     page: 2 },
@@ -322,15 +428,15 @@ export default function ReportDetail() {
     energy:              { title: 'Energy Analysis',      page: 4 },
     ecoIncentive:         { title: 'Eco Incentive',         page: 5 },
     luminaires:           { title: 'Luminaire Upgrades',    page: 6 },
-    financing:            { title: 'Financing Estimates',   page: 7 },
-    companyHighlights:  { title: 'Company Highlights',    page: 8 },
+    financing:            { title: 'Financing Estimates',   page: financingPage },
+    companyHighlights:  { title: 'Company Highlights',    page: financingPage + 1 },
   };
 
   // ── Investment highlights ──────────────────────────────────────────────────
   const highlights: { label: string; value: string; bg: string }[] = [
-    { label: 'Payback (yrs)',    value: calc ? calc.payback.toFixed(1)            : (report.payback ?? '—'), bg: '#8fcf74' },
+    { label: 'Payback (yrs)',    value: calc ? formatNumber2(calc.payback)        : fmtRaw(report.payback),  bg: '#8fcf74' },
     { label: 'NPV',              value: calc ? fmt$(calc.reportNpv)               : '—',                     bg: '#f1d2ff' },
-    { label: 'ROI (10 yrs)',     value: calc ? `${calc.roi.toFixed(1)}%`          : '—',                     bg: '#f1d2ff' },
+    { label: 'ROI (10 yrs)',     value: calc ? `${formatNumber2(calc.roi)}%`      : '—',                     bg: '#f1d2ff' },
     { label: 'Savings (10 yrs)', value: calc ? fmt$(calc.savings10)               : '—',                     bg: '#8fcf74' },
   ];
 
@@ -452,100 +558,6 @@ export default function ReportDetail() {
   const criImprovement    = calc ? calc.criGlobal    : 20;
   const lumenImprovement  = calc ? calc.lumensGlobal : 22161;
 
-  // ── Luminaire areas from fn_get_project ───────────────────────────────────
-  type AreaRow = {
-    name: string;
-    ceilingHeight: string;
-    dailyUsage: string;
-    controlType: string;
-    application: string;
-    voltage: string;
-    areaSqFt: string;
-    installationSurface: string;
-    ingressProtection: string;
-    notes: string;
-    luminaires: LuminairePair[];
-  };
-
-  const proposalItems = Array.isArray(report.proposal) ? (report.proposal as Record<string, unknown>[]) : [];
-
-  const luminaireAreas: AreaRow[] = (project?.areas ?? []).map((area, aIdx) => {
-    const a = area as Record<string, unknown>;
-    const areaTitle = (a.title ?? a.name ?? '') as string;
-
-    // Match by title first (proposal areas may not be in the same order as project areas)
-    const proposalArea = (
-      proposalItems.find((p) => (p.title as string) === areaTitle) ??
-      proposalItems[aIdx] ??
-      {}
-    ) as Record<string, unknown>;
-
-    const proposalLums = Array.isArray(proposalArea.luminaires)
-      ? (proposalArea.luminaires as Record<string, unknown>[])
-      : [];
-
-    return {
-      name:                areaTitle || `Area ${aIdx + 1}`,
-      ceilingHeight:       (a.ceilingHeight || a.ceiling_height || '—') as string,
-      dailyUsage:          (a.dailyUsage    || a.daily_usage    || '—') as string,
-      controlType:         (a.controlType   || a.control_type   || '—') as string,
-      application:         (a.application                       || '—') as string,
-      voltage:             (a.voltage                           || '—') as string,
-      areaSqFt:            (a.areaSqFt      || a.area_sqft      || '—') as string,
-      installationSurface: (a.installationSurface || a.installation_surface || '—') as string,
-      ingressProtection:   (a.ingressProtection   || a.ingress_protection   || '—') as string,
-      notes:               (a.notes                            || '—') as string,
-      luminaires: (area.luminaires ?? []).map((lum, lIdx): LuminairePair => {
-        const l  = lum as Record<string, unknown>;
-        const pl = (proposalLums[lIdx] ?? {}) as Record<string, unknown>;
-
-        // Existing — prefer proposal *Existing objects, fall back to flat luminaire fields
-        const fe = pl.fixtureExisting     as Record<string, unknown> | null | undefined;
-        const le = pl.lampExisting        as Record<string, unknown> | null | undefined;
-        const pe = pl.powerSupplyExisting as Record<string, unknown> | null | undefined;
-        const ce = pl.controlExisting     as Record<string, unknown> | null | undefined;
-        const ae = pl.accessoryExisting   as Record<string, unknown> | null | undefined;
-
-        const existing = buildLuminaireSummary({
-          fixtureDescription:     String(fe?.description     ?? l.fixtureDescription     ?? ''),
-          lampPerFixture:         String(pl.lampPerFixture   ?? l.lampPerFixture          ?? ''),
-          lampDescription:        String(le?.description     ?? l.lampDescription         ?? ''),
-          powerSupplyDescription: String(pe?.description     ?? l.powerSupplyDescription  ?? ''),
-          controlDescription:     String(ce?.description     ?? l.controlDescription      ?? ''),
-          accessoryDescriptionA:  String(ae?.description     ?? l.accessoryDescriptionA   ?? ''),
-        }) || '—';
-
-        // Recommended — check 'description' (seeded products) then component-specific keys
-        // (manually-created products may store the label in fixtureDescription, lampDescription, etc.)
-        const desc = (obj: unknown, ...altKeys: string[]): string => {
-          if (!obj || typeof obj !== 'object') return '';
-          const o = obj as Record<string, unknown>;
-          for (const key of ['description', ...altKeys]) {
-            if (o[key] != null && o[key] !== '') return String(o[key]);
-          }
-          return '';
-        };
-
-        const recParts: string[] = [];
-        const fix = desc(pl.fixtureRecommended, 'fixtureDescription');
-        const lam = desc(pl.lampRecommended,     'lampDescription');
-        const lpf = String(pl.lampPerFixture ?? '');
-        const pow = desc(pl.powerSupplyRecommended, 'powerSupplyDescription');
-        const ctl = desc(pl.controlRecommended,     'controlDescription');
-        const acc = desc(pl.accessoryRecommended,   'accessoryDescriptionA');
-        if (fix) recParts.push(fix);
-        if (lam) recParts.push(lpf ? `(${lpf}) ${lam}` : lam);
-        if (pow) recParts.push(`powered by ${pow}`);
-        if (ctl) recParts.push(`controlled by ${ctl}`);
-        if (acc) recParts.push(`with ${acc}`);
-
-        return { existing, recommended: recParts.join(', ') || '—' };
-      }),
-    };
-  });
-
-  const allLuminaires = luminaireAreas.flatMap((a) => a.luminaires);
-
   const breadcrumb = (
     <span>
       <Link to="/projects" className="hover:underline">Projects</Link>
@@ -648,6 +660,7 @@ export default function ReportDetail() {
                       <button
                         type="button"
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        onClick={() => { if (luminairePages) setPdfAction('print'); }}
                       >
                         <Printer className="h-4 w-4 shrink-0 text-gray-500" />
                         Print PDF
@@ -658,7 +671,7 @@ export default function ReportDetail() {
                       <button
                         type="button"
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                        onClick={() => setPdfDownload(true)}
+                        onClick={() => { if (luminairePages) setPdfAction('download'); }}
                       >
                         <CloudDownload className="h-4 w-4 shrink-0 text-gray-500" />
                         Energy Report
@@ -673,6 +686,7 @@ export default function ReportDetail() {
                       <button
                         type="button"
                         className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        onClick={() => { if (luminairePages) setPdfAction('print'); }}
                       >
                         <Printer className="h-4 w-4 shrink-0 text-gray-500" />
                         Print PDF
@@ -844,7 +858,7 @@ export default function ReportDetail() {
                       width={65}
                     />
                     <Tooltip
-                      formatter={(value: number) => [`$${value.toLocaleString()}`, undefined]}
+                      formatter={(value: number) => [formatCurrency2(value), undefined]}
                       labelFormatter={(label) => `Year ${label}`}
                     />
                     <Line
@@ -908,7 +922,7 @@ export default function ReportDetail() {
                               row.bold ? 'font-bold' : 'font-medium',
                             ].join(' ')}
                           >
-                            ${val.toLocaleString()}
+                            {formatCurrency2(val)}
                           </span>
                         </td>
                       ))}
@@ -987,7 +1001,7 @@ export default function ReportDetail() {
                                 row.bold ? 'font-bold' : 'font-medium',
                               ].join(' ')}
                             >
-                              {val.toLocaleString()}
+                              {formatNumber2(val)}
                             </span>
                           </td>
                         ))}
@@ -1047,7 +1061,7 @@ export default function ReportDetail() {
                         width={75}
                       />
                       <Tooltip
-                        formatter={(value: number) => [value.toLocaleString(), undefined]}
+                        formatter={(value: number) => [formatNumber2(value), undefined]}
                         labelFormatter={(label) => `Year ${label}`}
                       />
                       <Bar dataKey="existing" name="Existing System" fill="#ff7f56" radius={[2, 2, 0, 0]} />
@@ -1090,7 +1104,7 @@ export default function ReportDetail() {
                               row.bold ? 'font-bold' : 'font-medium',
                             ].join(' ')}
                           >
-                            ${val.toLocaleString()}
+                            {formatCurrency2(val)}
                           </span>
                         </td>
                       ))}
@@ -1143,7 +1157,7 @@ export default function ReportDetail() {
                           style={{ backgroundColor: '#d4e3cd' }}
                           className="block text-center py-3 text-gray-800 text-sm font-medium"
                         >
-                          {row.prefix}{val.toLocaleString()}
+                          {row.prefix}{formatNumber2(val)}
                         </span>
                       </td>
                     ))}
@@ -1173,7 +1187,7 @@ export default function ReportDetail() {
                       style={{ backgroundColor: '#9cbdd8' }}
                       className="w-28 text-center py-2 text-sm font-semibold text-gray-800 shrink-0"
                     >
-                      {criImprovement}%
+                      {formatNumber2(criImprovement)}%
                     </span>
                     <span className="text-sm text-gray-700">Avg. Improved CRI</span>
                   </div>
@@ -1182,7 +1196,7 @@ export default function ReportDetail() {
                       style={{ backgroundColor: '#ffd339' }}
                       className="w-28 text-center py-2 text-sm font-semibold text-gray-800 shrink-0"
                     >
-                      {lumenImprovement.toLocaleString()}%
+                      {formatNumber2(lumenImprovement)}%
                     </span>
                     <span className="text-sm text-gray-700">Avg. Improved Illumination</span>
                   </div>
@@ -1207,7 +1221,7 @@ export default function ReportDetail() {
                     <YAxis hide />
                     <Tooltip
                       cursor={false}
-                      formatter={(value: number) => [value.toLocaleString(), undefined]}
+                      formatter={(value: number) => [formatNumber2(value), undefined]}
                       labelFormatter={(label) => `${label}`}
                     />
                     <Bar dataKey="cri"    name="Improved CRI"                fill="#9cbdd8" radius={[2, 2, 0, 0]} isAnimationActive={false} />
@@ -1267,7 +1281,7 @@ export default function ReportDetail() {
                               row.bold ? 'font-bold' : 'font-medium',
                             ].join(' ')}
                           >
-                            {val.toLocaleString()}
+                            {formatNumber2(val)}
                           </span>
                         </td>
                       ))}
@@ -1344,7 +1358,7 @@ export default function ReportDetail() {
                                 row.bold ? 'font-bold' : 'font-medium',
                               ].join(' ')}
                             >
-                              ${val.toLocaleString()}
+                              {formatCurrency2(val)}
                             </span>
                           </td>
                         ))}
@@ -1401,7 +1415,7 @@ export default function ReportDetail() {
                     width={75}
                   />
                   <Tooltip
-                    formatter={(value: number) => [`$${value.toLocaleString()}`, undefined]}
+                    formatter={(value: number) => [formatCurrency2(value), undefined]}
                     labelFormatter={(label) => `Year ${label}`}
                   />
                   <Line type="linear" dataKey="existing" name="Existing System"        stroke="#e53e3e" strokeWidth={2} dot={{ r: 3, fill: '#e53e3e', strokeWidth: 0 }} />
@@ -1519,10 +1533,13 @@ export default function ReportDetail() {
         )}
       </div>
 
-      {pdfDownload && (
+      {luminairesMeasurer}
+
+      {pdfAction && (
         <ReportPDFCapture
           fileName={`${project.title}_${report.proposal_name || reportId}.pdf`}
-          onDone={() => setPdfDownload(false)}
+          mode={pdfAction}
+          onDone={() => setPdfAction(null)}
         >
           <CoverPagePDF
             companyName={pdfCompanyName}
@@ -1575,9 +1592,8 @@ export default function ReportDetail() {
           />
           <LuminairesPDF
             companyName={pdfCompanyName}
-            pageNumber={pdfToc.luminaires.page}
-            allLuminaires={allLuminaires}
-            luminaireAreas={luminaireAreas}
+            basePageNumber={pdfToc.luminaires.page}
+            pages={luminairePages ?? []}
           />
           <FinancingPDF
             companyName={pdfCompanyName}
@@ -1586,6 +1602,10 @@ export default function ReportDetail() {
             financingLeft={FINANCING_LEFT}
             financingRows={FINANCING_TABLE_ROWS}
             financingForecastData={FINANCING_FORECAST_DATA}
+          />
+          <CompanyHighlightsPDF
+            companyName={pdfCompanyName}
+            pageNumber={pdfToc.companyHighlights.page}
           />
         </ReportPDFCapture>
       )}

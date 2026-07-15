@@ -1,4 +1,7 @@
+import { useLayoutEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ReportPDFPage } from './ReportPDFPage';
+import { PAGE_WIDTH_PX } from './pdfLayout';
 
 interface LuminairePair {
   existing: string;
@@ -19,18 +22,13 @@ interface LuminaireAreaRow {
   luminaires: readonly LuminairePair[];
 }
 
-export interface LuminairesPDFProps {
-  companyName: string;
-  pageNumber: number;
-  allLuminaires: readonly LuminairePair[];
-  luminaireAreas: readonly LuminaireAreaRow[];
-}
+// Matches ReportPDFPage's p-10 (40px each side) so measured widths equal rendered widths.
+const CONTENT_WIDTH_PX = PAGE_WIDTH_PX - 80;
 
-// Static print version of the live tab's LumRow — no Print/Download buttons,
-// since those are interactive UI chrome with no meaning in a static document.
+// Static print version of the live tab's LumRow — no Print/Download buttons, since those are interactive UI chrome with no meaning in a static document.
 function LumRow({ pair }: { pair: LuminairePair }) {
   return (
-    <div className="grid grid-cols-2 gap-4 mb-4">
+    <div className="grid grid-cols-2 gap-4" style={{ paddingBottom: 16 }}>
       <div className="border border-gray-200 rounded p-3 text-base text-gray-700 leading-snug">
         {pair.existing || '—'}
       </div>
@@ -52,62 +50,151 @@ const AREA_DETAIL_FIELDS = (area: LuminaireAreaRow) => [
   { label: 'Ingress Protection:',  value: area.ingressProtection },
 ];
 
-export function LuminairesPDF({ companyName, pageNumber, allLuminaires, luminaireAreas }: LuminairesPDFProps) {
+function IntroBlock() {
   return (
-    <ReportPDFPage title="Luminaire Upgrades" companyName={companyName} pageNumber={pageNumber}>
-      <div>
-        <p className="text-gray-900 text-base leading-relaxed mb-2">
-          This page details the existing lighting components that can be recycled and the
-          recommended upgrades that can replace them. Use the following notation to quickly
-          review the luminaire descriptions:
+    <div style={{ paddingBottom: 32 }}>
+      <p className="text-gray-900 text-base leading-relaxed mb-2">
+        This page details the existing lighting components that can be recycled and the
+        recommended upgrades that can replace them. Use the following notation to quickly
+        review the luminaire descriptions:
+      </p>
+      <p className="text-base font-bold">
+        [Fixture QTY] Fixture Description (Lamp QTY) Component Descriptions {'{'}Mounting Height{'}'}
+      </p>
+    </div>
+  );
+}
+
+function TotalsHeaderBlock() {
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <p className="text-center text-lg font-bold tracking-widest uppercase text-gray-400 border-b-2 border-gray-300 pb-2">
+          Existing Components
         </p>
-        <p className="text-base font-bold">
-          [Fixture QTY] Fixture Description (Lamp QTY) Component Descriptions {'{'}Mounting Height{'}'}
+        <p className="text-center text-lg font-bold tracking-widest uppercase text-[#619c48] border-b-2 border-[#619c48] pb-2">
+          Recommended Components
         </p>
       </div>
+      <h3 className="text-xl font-bold text-gray-900 mb-4">Totals</h3>
+    </div>
+  );
+}
 
-      <div>
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <p className="text-center text-lg font-bold tracking-widest uppercase text-gray-400 border-b-2 border-gray-300 pb-2">
-            Existing Components
-          </p>
-          <p className="text-center text-lg font-bold tracking-widest uppercase text-[#619c48] border-b-2 border-[#619c48] pb-2">
-            Recommended Components
-          </p>
-        </div>
-
-        <h3 className="text-xl font-bold text-gray-900 mb-4">Totals</h3>
-        <div className="mb-8">
-          {allLuminaires.length > 0
-            ? allLuminaires.map((pair, i) => <LumRow key={i} pair={pair} />)
-            : <p className="text-base text-gray-400">No luminaire data available.</p>}
-        </div>
-
-        {luminaireAreas.map((area) => (
-          <div key={area.name} className="mb-8">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">{area.name}</h3>
-
-            <div className="border border-[#2c628d] p-4 mb-4 text-base">
-              <div className="grid grid-cols-4 gap-x-6 gap-y-2 mb-2">
-                {AREA_DETAIL_FIELDS(area).map(({ label, value }) => (
-                  <div key={label}>
-                    <span className="text-[#2c628d] font-semibold">{label}</span>{' '}
-                    <span className="font-bold text-gray-800">{value}</span>
-                  </div>
-                ))}
-              </div>
-              <div>
-                <span className="text-[#2c628d] font-semibold">Notes:</span>{' '}
-                <span className="font-bold text-gray-800">{area.notes}</span>
-              </div>
+function AreaHeaderBlock({ area }: { area: LuminaireAreaRow }) {
+  return (
+    <div style={{ paddingTop: 32, paddingBottom: 16 }}>
+      <h3 className="text-xl font-bold text-gray-900 mb-4">{area.name}</h3>
+      <div className="border border-[#2c628d] p-4 text-base">
+        <div className="grid grid-cols-4 gap-x-6 gap-y-2 mb-2">
+          {AREA_DETAIL_FIELDS(area).map(({ label, value }) => (
+            <div key={label}>
+              <span className="text-[#2c628d] font-semibold">{label}</span>{' '}
+              <span className="font-bold text-gray-800">{value}</span>
             </div>
+          ))}
+        </div>
+        <div>
+          <span className="text-[#2c628d] font-semibold">Notes:</span>{' '}
+          <span className="font-bold text-gray-800">{area.notes}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-            <div>
-              {area.luminaires.map((pair, i) => <LumRow key={i} pair={pair} />)}
-            </div>
+// One indivisible chunk of content — never split across a page break. A lead block (a section header) is always kept glued to the block right after it, so a heading never ends up alone at the bottom of a page.
+interface LuminaireBlock {
+  key: string;
+  lead: boolean;
+  node: ReactNode;
+}
+
+function buildBlocks(allLuminaires: readonly LuminairePair[], luminaireAreas: readonly LuminaireAreaRow[]): LuminaireBlock[] {
+  const blocks: LuminaireBlock[] = [{ key: 'intro', lead: false, node: <IntroBlock /> }];
+
+  blocks.push({ key: 'totals-header', lead: true, node: <TotalsHeaderBlock /> });
+  if (allLuminaires.length > 0) {
+    allLuminaires.forEach((pair, i) => blocks.push({ key: `totals-row-${i}`, lead: false, node: <LumRow pair={pair} /> }));
+  } else {
+    blocks.push({ key: 'totals-empty', lead: false, node: <p className="text-base text-gray-400">No luminaire data available.</p> });
+  }
+
+  luminaireAreas.forEach((area, aIdx) => {
+    blocks.push({ key: `area-${aIdx}-header`, lead: true, node: <AreaHeaderBlock area={area} /> });
+    area.luminaires.forEach((pair, i) => blocks.push({ key: `area-${aIdx}-row-${i}`, lead: false, node: <LumRow pair={pair} /> }));
+  });
+
+  return blocks;
+}
+
+// Greedily fills each page in order; when a block (or a lead block plus the block it's glued to) no longer fits, it starts a new page instead.
+function paginateBlocks(blocks: LuminaireBlock[], heights: Map<string, number>, budgetPx: number): LuminaireBlock[][] {
+  const pages: LuminaireBlock[][] = [[]];
+  let used = 0;
+  blocks.forEach((block, i) => {
+    const height = heights.get(block.key) ?? 0;
+    const next = blocks[i + 1];
+    const glueHeight = block.lead && next ? (heights.get(next.key) ?? 0) : 0;
+    if (used > 0 && used + height + glueHeight > budgetPx) {
+      pages.push([]);
+      used = 0;
+    }
+    pages[pages.length - 1].push(block);
+    used += height;
+  });
+  return pages;
+}
+
+/** Measures Luminaires content off-screen and splits it into as many pages as it actually needs — re-measures whenever the data changes, never guesses a fixed row budget. */
+export function useLuminairesPagination(allLuminaires: readonly LuminairePair[], luminaireAreas: readonly LuminaireAreaRow[]) {
+  const blocks = buildBlocks(allLuminaires, luminaireAreas);
+  const blockRefs = useRef(new Map<string, HTMLDivElement | null>());
+  const budgetRef = useRef<HTMLDivElement>(null);
+  const [pages, setPages] = useState<LuminaireBlock[][] | null>(null);
+
+  useLayoutEffect(() => {
+    const heights = new Map<string, number>();
+    blocks.forEach((block) => {
+      const el = blockRefs.current.get(block.key);
+      if (el) heights.set(block.key, el.getBoundingClientRect().height);
+    });
+    const budget = budgetRef.current?.getBoundingClientRect().height ?? 0;
+    setPages(budget > 0 ? paginateBlocks(blocks, heights, budget) : [blocks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allLuminaires, luminaireAreas]);
+
+  const measurer = (
+    <div aria-hidden style={{ position: 'fixed', top: 0, left: '-9999px', width: CONTENT_WIDTH_PX, pointerEvents: 'none', zIndex: -1 }}>
+      {blocks.map((block) => (
+        <div key={block.key} ref={(el) => blockRefs.current.set(block.key, el)}>{block.node}</div>
+      ))}
+      {/* Empty dummy page — contentRef measures its own content wrapper's real rendered height, the true per-page budget (header/footer/padding), instead of guessing it. */}
+      <ReportPDFPage title="Luminaire Upgrades" companyName="" pageNumber={0} contentRef={budgetRef}>
+        {null}
+      </ReportPDFPage>
+    </div>
+  );
+
+  return { pages, measurer };
+}
+
+export interface LuminairesPDFProps {
+  companyName: string;
+  basePageNumber: number;
+  pages: LuminaireBlock[][];
+}
+
+export function LuminairesPDF({ companyName, basePageNumber, pages }: LuminairesPDFProps) {
+  return (
+    <>
+      {pages.map((pageBlocks, i) => (
+        <ReportPDFPage key={i} title="Luminaire Upgrades" companyName={companyName} pageNumber={basePageNumber + i}>
+          <div style={{ width: CONTENT_WIDTH_PX }}>
+            {pageBlocks.map((block) => <div key={block.key}>{block.node}</div>)}
           </div>
-        ))}
-      </div>
-    </ReportPDFPage>
+        </ReportPDFPage>
+      ))}
+    </>
   );
 }

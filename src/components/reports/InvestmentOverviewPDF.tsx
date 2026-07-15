@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { ReportPDFPage } from './ReportPDFPage';
+import { formatCurrency2 } from './pdfLayout';
 
 export interface InvestmentOverviewPDFProps {
   companyName: string;
@@ -18,7 +19,7 @@ export interface InvestmentOverviewPDFProps {
   projectedSavings: { existing: readonly number[]; led: readonly number[]; savings: readonly number[] };
 }
 
-const formatYAxis = (value: number) => (value === 0 ? '$0' : `$${value.toLocaleString()}`);
+const formatYAxis = (value: number) => formatCurrency2(value);
 const CHART_MARGIN = { top: 10, right: 20, left: 0, bottom: 35 } as const;
 const Y_DOMAIN_MAX = 400000;
 const Y_TICKS = [0, 50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000];
@@ -121,7 +122,7 @@ export function InvestmentOverviewPDF({
                 width={75}
               />
               <Tooltip
-                formatter={(value: number) => [`$${value.toLocaleString()}`, undefined]}
+                formatter={(value: number) => [formatCurrency2(value), undefined]}
                 labelFormatter={(label) => `Year ${label}`}
               />
               <Line
@@ -168,7 +169,7 @@ export function InvestmentOverviewPDF({
                         style={{ backgroundColor: row.bg }}
                         className={`block text-center py-3 text-gray-800 text-base ${row.bold ? 'font-bold' : 'font-medium'}`}
                       >
-                        ${val.toLocaleString()}
+                        {formatCurrency2(val)}
                       </span>
                     </td>
                   ))}

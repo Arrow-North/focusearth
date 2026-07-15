@@ -1,6 +1,6 @@
 import { ChevronRight } from 'lucide-react';
 import { ReportPDFPage } from './ReportPDFPage';
-import { LEGACY_PX_RATIO, TITILLIUM_WEB_IMPORT } from './pdfLayout';
+import { LEGACY_PX_RATIO, TITILLIUM_WEB_IMPORT, HEADING_FONT_SIZE_PX } from './pdfLayout';
 
 export interface TocEntry {
   title: string;
@@ -17,7 +17,6 @@ const ROW_MIN_HEIGHT_PX = Math.round(70 * LEGACY_PX_RATIO);
 const ROW_BORDER_PX = Math.round(2 * LEGACY_PX_RATIO);
 const ROW_PADDING_X_PX = Math.round(20 * LEGACY_PX_RATIO);
 const ROW_MARGIN_TOP_PX = Math.round(20 * LEGACY_PX_RATIO);
-const ROW_FONT_SIZE_PX = Math.round(24 * LEGACY_PX_RATIO);
 const ROW_TEXT_GAP_PX = Math.round(20 * LEGACY_PX_RATIO);
 const ROW_BORDER_COLOR = '#9CBDD8';
 
@@ -38,10 +37,10 @@ export function TableOfContentsPDF({ companyName, pageNumber, entries }: TableOf
             }}
           >
             <div className="flex items-center">
-              <span style={{ fontSize: ROW_FONT_SIZE_PX, fontWeight: 300, marginRight: ROW_TEXT_GAP_PX }}>
+              <span style={{ fontSize: HEADING_FONT_SIZE_PX, fontWeight: 300, marginRight: ROW_TEXT_GAP_PX }}>
                 {entry.page}
               </span>
-              <span style={{ fontSize: ROW_FONT_SIZE_PX, fontWeight: 700 }}>
+              <span style={{ fontSize: HEADING_FONT_SIZE_PX, fontWeight: 700 }}>
                 {entry.title}
               </span>
             </div>

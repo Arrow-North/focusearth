@@ -7,6 +7,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { ReportPDFPage } from './ReportPDFPage';
+import { formatNumber2 } from './pdfLayout';
 
 export interface EcoIncentivePDFProps {
   companyName: string;
@@ -62,7 +63,7 @@ export function EcoIncentivePDF({
                       style={{ backgroundColor: '#d4e3cd' }}
                       className="block text-center py-3 text-gray-800 font-medium"
                     >
-                      {row.prefix}{val.toLocaleString()}
+                      {row.prefix}{formatNumber2(val)}
                     </span>
                   </td>
                 ))}
@@ -89,7 +90,7 @@ export function EcoIncentivePDF({
                 style={{ backgroundColor: '#9cbdd8' }}
                 className="w-36 text-center py-3 text-lg font-semibold text-gray-800 shrink-0"
               >
-                {criImprovement}%
+                {formatNumber2(criImprovement)}%
               </span>
               <span className="text-base text-gray-700">Avg. Improved CRI</span>
             </div>
@@ -98,7 +99,7 @@ export function EcoIncentivePDF({
                 style={{ backgroundColor: '#ffd339' }}
                 className="w-36 text-center py-3 text-lg font-semibold text-gray-800 shrink-0"
               >
-                {lumenImprovement.toLocaleString()}%
+                {formatNumber2(lumenImprovement)}%
               </span>
               <span className="text-base text-gray-700">Avg. Improved Illumination</span>
             </div>
@@ -122,7 +123,7 @@ export function EcoIncentivePDF({
               <YAxis hide />
               <Tooltip
                 cursor={false}
-                formatter={(value: number) => [value.toLocaleString(), undefined]}
+                formatter={(value: number) => [formatNumber2(value), undefined]}
                 labelFormatter={(label) => `${label}`}
               />
               <Bar dataKey="cri"    name="Improved CRI"                fill="#9cbdd8" radius={[2, 2, 0, 0]} isAnimationActive={false} />
@@ -173,7 +174,7 @@ export function EcoIncentivePDF({
                       style={{ backgroundColor: row.bg }}
                       className={`block w-full text-center py-4 text-gray-800 ${row.bold ? 'font-bold' : 'font-medium'}`}
                     >
-                      {val.toLocaleString()}
+                      {formatNumber2(val)}
                     </span>
                   </td>
                 ))}

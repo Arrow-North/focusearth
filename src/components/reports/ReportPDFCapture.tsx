@@ -6,23 +6,21 @@ import { PAGE_WIDTH_PX } from './pdfLayout';
 interface Props {
   fileName: string;
   onDone: () => void;
+  // 'download' saves the file directly, 'print' loads it into a hidden iframe on this page and triggers the browser's print dialog — no navigation, no new tab.
+  mode?: 'download' | 'print';
   /** One or more ReportPDFPage-based components, stacked top to bottom — each is exactly one A4 page tall. */
   children: React.ReactNode;
 }
 
-/**
- * Renders report pages off-screen vertically, captures the stack in one 
- * html2canvas pass, and slices it cleanly into individual A4 pages using jsPDF.
- */
-export function ReportPDFCapture({ fileName, onDone, children }: Props) {
+/** Renders report pages off-screen vertically, captures the stack in one html2canvas pass, and slices it cleanly into individual A4 pages using jsPDF. */
+export function ReportPDFCapture({ fileName, onDone, mode = 'download', children }: Props) {
   const captureRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = setTimeout(async () => {
       if (!captureRef.current) { onDone(); return; }
       try {
-        // backgroundColor is explicit (not left to html2canvas's default) because
-        // JPEG below has no alpha channel — any transparent pixel would render black.
+        // backgroundColor is explicit (not left to html2canvas's default) because JPEG below has no alpha channel — any transparent pixel would render black.
         const canvas = await html2canvas(captureRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const pageW = pdf.internal.pageSize.getWidth();
@@ -38,14 +36,21 @@ export function ReportPDFCapture({ fileName, onDone, children }: Props) {
           sliceCanvas
             .getContext('2d')!
             .drawImage(canvas, 0, sourceY * (canvas.width / pageW), canvas.width, sliceCanvas.height, 0, 0, canvas.width, sliceCanvas.height);
-          // JPEG instead of PNG: html2canvas output has anti-aliased text/gradient noise
-          // that lossless PNG can't compress well — this is what was inflating file size.
+          // JPEG instead of PNG: html2canvas output has anti-aliased text/gradient noise that lossless PNG can't compress well — this is what was inflating file size.
           pdf.addImage(sliceCanvas.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, pageW, sliceH);
           remaining -= sliceH;
           sourceY += sliceH;
           if (remaining > 0) pdf.addPage();
         }
-        pdf.save(fileName);
+        if (mode === 'print') {
+          const iframe = document.createElement('iframe');
+          Object.assign(iframe.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
+          iframe.src = pdf.output('bloburl').toString();
+          iframe.onload = () => iframe.contentWindow?.print();
+          document.body.appendChild(iframe);
+        } else {
+          pdf.save(fileName);
+        }
       } finally {
         onDone();
       }

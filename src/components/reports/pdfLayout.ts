@@ -8,6 +8,21 @@ export function formatDownloadDate(date: Date): string {
   return `${mm}.${dd}.${date.getFullYear()}`;
 }
 
+// Always exactly 2 decimals, sign handled correctly for negatives (e.g. -5.5 -> "-5.50", not a bare truncation).
+export function formatNumber2(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Uses Intl currency formatting so the minus sign lands before the $ for negatives (-$5.50), not after it ($-5.50) like plain string concatenation would produce.
+export function formatCurrency2(n: number): string {
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export const TITILLIUM_WEB_IMPORT = "@import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap');";
 
 export const FRANK_RUHL_LIBRE_IMPORT = "@import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre&display=swap');";
+
+// Shared type scale so every report page reads consistently — matches the Tailwind text-base/text-xl/text-sm classes already used by 5 of the 8 pages, pages using inline fontSize should use these instead of their own numbers.
+export const BODY_FONT_SIZE_PX = 16; // paragraphs, row labels, table cells
+export const HEADING_FONT_SIZE_PX = 20; // section headings
+export const SMALL_FONT_SIZE_PX = 14; // table column headers, footnotes

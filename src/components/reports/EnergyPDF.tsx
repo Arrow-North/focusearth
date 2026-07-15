@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { ReportPDFPage } from './ReportPDFPage';
+import { formatNumber2, formatCurrency2 } from './pdfLayout';
 
 type LabeledRow = { label: string; values: readonly number[]; bg: string; bold: boolean };
 
@@ -21,7 +22,7 @@ export interface EnergyPDFProps {
   expenditureRows: readonly LabeledRow[];
 }
 
-const formatConsumptionY = (value: number) => (value === 0 ? '0' : value.toLocaleString());
+const formatConsumptionY = (value: number) => formatNumber2(value);
 const CONSUMPTION_Y_MAX = 7000000;
 const CONSUMPTION_Y_TICKS = [0, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000];
 
@@ -48,7 +49,7 @@ function ComparisonTable({ cols, rows, dollarPrefix }: { cols: readonly string[]
                   style={{ backgroundColor: row.bg }}
                   className={`block text-center py-3 text-gray-800 text-base ${row.bold ? 'font-bold' : 'font-medium'}`}
                 >
-                  {dollarPrefix ? '$' : ''}{val.toLocaleString()}
+                  {dollarPrefix ? formatCurrency2(val) : formatNumber2(val)}
                 </span>
               </td>
             ))}
@@ -147,7 +148,7 @@ export function EnergyPDF({
                   width={80}
                 />
                 <Tooltip
-                  formatter={(value: number) => [value.toLocaleString(), undefined]}
+                  formatter={(value: number) => [formatNumber2(value), undefined]}
                   labelFormatter={(label) => `Year ${label}`}
                 />
                 <Bar dataKey="existing" name="Existing System" fill="#ff7f56" radius={[2, 2, 0, 0]} />

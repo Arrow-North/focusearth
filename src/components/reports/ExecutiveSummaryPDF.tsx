@@ -1,7 +1,7 @@
 import { PieChart, Pie, Cell } from 'recharts';
 import CeoSignature from '@/assets/CeoSignature.png';
 import { ReportPDFPage } from './ReportPDFPage';
-import { LEGACY_PX_RATIO, TITILLIUM_WEB_IMPORT, FRANK_RUHL_LIBRE_IMPORT } from './pdfLayout';
+import { LEGACY_PX_RATIO, TITILLIUM_WEB_IMPORT, FRANK_RUHL_LIBRE_IMPORT, BODY_FONT_SIZE_PX, HEADING_FONT_SIZE_PX, formatNumber2 } from './pdfLayout';
 
 export interface ExecutiveSummaryPDFProps {
   companyName: string;
@@ -26,13 +26,12 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 const UNALLOCATED_COLOR = '#d1d5db';
 
-const DIVIDER_PX = Math.round(1 * LEGACY_PX_RATIO); 
-const LABEL_FONT_SIZE_PX = Math.round(18 * LEGACY_PX_RATIO);
-const ROW_FONT_SIZE_PX = Math.round(22 * LEGACY_PX_RATIO);
+const LETTER_FONT_SIZE_PX = 24; // bumped up from the shared BODY_FONT_SIZE_PX, scoped to this page's letter only
+const CONTENT_BOTTOM_GAP_PX = 100; // space between the priorities block and the page footer border
+const DIVIDER_PX = Math.round(1 * LEGACY_PX_RATIO);
 const SIGNATURE_WIDTH_PX = Math.round(150 * LEGACY_PX_RATIO);
 const SIGNATURE_HEIGHT_PX = Math.round(SIGNATURE_WIDTH_PX * (50 / 150));
-const CHART_WIDTH_PX = Math.round(450 * LEGACY_PX_RATIO);
-const CHART_HEIGHT_PX = Math.round(280 * LEGACY_PX_RATIO);
+const CHART_SIZE_PX = 220; // fixed number, not ResponsiveContainer — that needs a live resize measurement html2canvas's fixed-delay capture can't guarantee
 
 /** Print layout for the "Executive Summary" report page — same letter + priorities chart as the legacy PDF. */
 export function ExecutiveSummaryPDF({
@@ -55,7 +54,7 @@ export function ExecutiveSummaryPDF({
 
   return (
     <ReportPDFPage title="Executive Summary" companyName={companyName} pageNumber={pageNumber}>
-      <div style={{ fontFamily: "'Frank Ruhl Libre', serif" }} className="text-lg leading-relaxed text-gray-900 space-y-4">
+      <div style={{ fontFamily: "'Frank Ruhl Libre', serif", fontSize: LETTER_FONT_SIZE_PX }} className="leading-relaxed text-gray-900 space-y-4">
         <p>Hello {companyName} Team!</p>
         <p>
           We had the privilege of working with {reuUserName} to explore the LED upgrade
@@ -64,47 +63,49 @@ export function ExecutiveSummaryPDF({
         <p>
           We've prepared a customized LED system to enhance your lighting environment
           and raise your property value. This solution is estimated to reduce the lighting
-          energy consumption at {projectAddress} by {energyReductionPct}%. The proposed system
-          will simultaneously improve illumination by {lumensImprovementPct}% and enhance color
-          rendering by {criImprovementPct}%.
+          energy consumption at {projectAddress} by {formatNumber2(energyReductionPct)}%. The proposed system
+          will simultaneously improve illumination by {formatNumber2(lumensImprovementPct)}% and enhance color
+          rendering by {formatNumber2(criImprovementPct)}%.
         </p>
         <p>
           If you have any questions about the contents or calculations of this report, please
           contact us at any time. We look forward to working with you.
         </p>
-        <div style={{ fontSize: LABEL_FONT_SIZE_PX }}>Thanks,</div>
-        <img src={CeoSignature} alt="Signature" style={{ width: SIGNATURE_WIDTH_PX, height: SIGNATURE_HEIGHT_PX }} />
-        <div style={{ fontSize: LABEL_FONT_SIZE_PX }}>CEO, Focus Earth</div>
       </div>
 
-      <div style={{ borderTop: `${DIVIDER_PX}px solid #000000` }}>
-        <p className="font-semibold text-gray-900 mt-6 mb-4" style={{ fontSize: LABEL_FONT_SIZE_PX, fontFamily: "'Titillium Web', sans-serif" }}>
-          Project Priorities:
-        </p>
+      {/* Signature+priorities grouped into one flex item so all the leftover space lands in the single gap above this block, not split before and after the signature. */}
+      <div style={{ paddingBottom: CONTENT_BOTTOM_GAP_PX }}>
+        <div style={{ fontSize: BODY_FONT_SIZE_PX }}>Thanks,</div>
+        <img src={CeoSignature} alt="Signature" style={{ width: SIGNATURE_WIDTH_PX, height: SIGNATURE_HEIGHT_PX }} />
+        <div style={{ fontSize: BODY_FONT_SIZE_PX }}>CEO, Focus Earth</div>
 
-        <div className="flex items-center justify-between">
-          <div className="grid grid-cols-2 gap-x-10 gap-y-4" style={{ fontFamily: "'Titillium Web', sans-serif" }}>
-            {PRIORITY_LABELS.map((label) => (
-              <div key={label} className="flex items-center justify-between gap-6">
-                <div className="flex items-center gap-3">
-                  <span className="w-5 h-5 rounded-sm shrink-0" style={{ backgroundColor: PRIORITY_COLORS[label] }} />
-                  <span style={{ fontSize: ROW_FONT_SIZE_PX, fontWeight: 600 }}>{label}</span>
+        <div className="mt-8" style={{ borderTop: `${DIVIDER_PX}px solid #000000` }}>
+          <p className="font-semibold text-gray-900 mt-6 mb-4" style={{ fontSize: HEADING_FONT_SIZE_PX, fontFamily: "'Titillium Web', sans-serif" }}>
+            Project Priorities:
+          </p>
+
+          <div className="flex items-center justify-between">
+            <div className="grid grid-cols-2 gap-3" style={{ fontFamily: "'Titillium Web', sans-serif" }}>
+              {PRIORITY_LABELS.map((label) => (
+                <div key={label} className="flex items-center gap-4 border border-gray-200 rounded-lg shadow-sm px-4 py-2.5">
+                  <span className="w-3 shrink-0 rounded-sm self-stretch" style={{ backgroundColor: PRIORITY_COLORS[label] }} />
+                  <span className="whitespace-nowrap" style={{ fontSize: BODY_FONT_SIZE_PX, fontWeight: 600 }}>{label}</span>
+                  <span className="ml-auto whitespace-nowrap" style={{ fontSize: BODY_FONT_SIZE_PX, fontWeight: 700, color: '#A9A9A9' }}>
+                    {formatNumber2(priorities?.[label] ?? 0)}%
+                  </span>
                 </div>
-                <span style={{ fontSize: ROW_FONT_SIZE_PX, fontWeight: 700, color: '#A9A9A9' }}>
-                  {priorities?.[label] ?? 0}%
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          <div style={{ width: CHART_WIDTH_PX, height: CHART_HEIGHT_PX }} className="shrink-0 flex items-center justify-center">
-            <PieChart width={CHART_HEIGHT_PX} height={CHART_HEIGHT_PX}>
-              <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={CHART_HEIGHT_PX / 2 - 10} isAnimationActive={false}>
-                {pieData.map((slice) => (
-                  <Cell key={slice.name} fill={slice.color} />
-                ))}
-              </Pie>
-            </PieChart>
+            <div className="flex-1 flex items-center justify-center">
+              <PieChart width={CHART_SIZE_PX} height={CHART_SIZE_PX}>
+                <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={CHART_SIZE_PX / 2 - 5} isAnimationActive={false}>
+                  {pieData.map((slice) => (
+                    <Cell key={slice.name} fill={slice.color} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </div>
           </div>
         </div>
       </div>
