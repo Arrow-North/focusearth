@@ -25,7 +25,8 @@ const SUPABASE_URL =
 const SUPABASE_SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ??
   process.env.VITE_SUPABASE_SERVICE_KEY ??
-  // Default local dev key from `supabase start`
+  // JWT service role key — required for GoTrue admin API (auth.admin.*)
+  // Get the current value from: supabase status --output json | jq .serviceRoleKey
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -51,15 +52,23 @@ async function createAuthUser(
 
   if (!error) return data.user.id;
 
-  // User already exists from a previous seed run — look up their ID
-  if (error.message.includes("already been registered") || error.message.includes("already registered")) {
-    const { data: list, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-    if (listErr) throw new Error(`createAuthUser lookup(${email}): ${listErr.message}`);
+  // On ANY error (Supabase error messages vary across versions — don't rely on
+  // specific strings), try to find an existing user before failing.
+  const { data: list, error: listErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+  if (!listErr) {
     const existing = list.users.find((u) => u.email === email);
     if (existing) return existing.id;
   }
 
-  throw new Error(`createAuthUser(${email}): ${error.message}`);
+  const msg =
+    (typeof error.message === "string" && error.message.trim() && error.message !== "{}")
+      ? error.message
+      : (error as unknown as Record<string, string>).error_description
+        ?? (error as unknown as Record<string, string>).error
+        ?? JSON.stringify(error, Object.getOwnPropertyNames(error))
+        ?? "unknown error";
+
+  throw new Error(`createAuthUser(${email}): ${msg}`);
 }
 
 async function insert<T extends Record<string, unknown>>(
@@ -625,6 +634,95 @@ async function main() {
     accessoryDescriptionBQty: "",
     accessoryDescriptionCQty: "",
     wattage: "36",
+
+    // ── Recommended replacements (ProductDetails shape) ──────────────────────
+    fixtureRecommended: {
+      description: '48"x24"x12 Surface LED Garage Fixture',
+      productType: "fixtures",
+      manufacturer: "LumiTech Pro",
+      orderCode: "LTP-SG-4824",
+      wattage: "40",
+      fixtureMount: "Surface",
+      fixtureStyle: "Garage",
+      fixtureApplication: "Garage",
+      fixtureDescription: '48"x24"x12 Surface LED Garage Fixture',
+      fixtureMountHeight: "12",
+      fixtureLength: "48",
+      fixtureWidth: "24",
+      fixtureDepth: "12",
+      fixtureLens: "Frosted",
+      fixturePricePerUnit: "185",
+      lumens: "5200",
+      cct: "5000K",
+      cri: "82",
+      lifetime: "50000",
+      dimmability: "0-10V",
+      ingressProtection: "IP 65",
+    },
+    lampRecommended: {
+      description: "LED T8 Tube 18W 5000K Frosted Medium Bipin BL-T8-18-50K",
+      productType: "lamp",
+      manufacturer: "BrightLamp Co.",
+      orderCode: "BL-T8-18-50K",
+      wattage: "18",
+      lampCategory: "T Series",
+      lampCategoryType: "T8",
+      lampWattage: "18",
+      lampColorTemperature: "5000",
+      lampBaseCategory: "Fluorescent Pin",
+      lampBaseCategoryType: "Medium Bipin",
+      lampLensType: "Frosted",
+      lampDescription: "LED T8 Tube 18W 5000K Frosted Medium Bipin BL-T8-18-50K",
+      lampProductCode: "BL-T8-18-50K",
+      lampPricePerUnit: "12",
+      lampPerFixture: "2",
+      lumens: "2200",
+      cct: "5000K",
+      cri: "82",
+      lifetime: "50000",
+    },
+    powerSupplyRecommended: {
+      description: "Emergency LED Driver 10W Emergent Corp. ELX Series-ELX-100",
+      productType: "power-supply",
+      manufacturer: "Emergent Corp.",
+      orderCode: "ELX-100",
+      powerSupplyType: "Emergency",
+      powerSupplyModel: "ELX Series",
+      powerSupplyManufacturer: "Emergent Corp.",
+      powerPricePerUnit: "18",
+      powerQTYFixture: ".25",
+      powerSupplyDescription: "Emergency Emergent Corp. ELX Series-ELX-100",
+      powerSupplyProductCode: "ELX-100",
+      wattage: "10",
+    },
+    controlRecommended: {
+      description: "Daylight Sensor 0-10V Photo Sense Ltd. PS-DLS-V2",
+      productType: "control",
+      manufacturer: "Photo Sense Ltd.",
+      orderCode: "PS-DLS-V2",
+      controlType: "Daylight Sensor",
+      controlModel: "PS-DLS-V2",
+      controlDimming: "0-10V",
+      controlManufacturer: "Photo Sense Ltd.",
+      controlPricePerUnit: "22",
+      controlQTYFixture: ".5",
+      controlDescription: "Daylight Sensor Photo Sense Ltd. 0-10V PS-DLS-V2",
+    },
+    accessoryRecommended: {
+      description: 'LED Protective Lens Cover 48"x24" Protecz Unltd. White PZ-LED-4824',
+      productType: "accessories",
+      manufacturer: "Protecz Unltd.",
+      orderCode: "PZ-LED-4824",
+      accessoryTypeA: "Protective Lens Cover",
+      accessoryColorA: "White",
+      accessoryLengthA: "48",
+      accessoryWidthA: "24",
+      accessoryManufacturerA: "Protecz Unltd.",
+      accessoryPricePerUnitA: "8",
+      accessoryDescriptionA: 'LED Protective Lens Cover 48"x24" Protecz Unltd. White PZ-LED-4824',
+      accessoryProductCodeA: "PZ-LED-4824",
+      accessoryDescriptionAQty: "1",
+    },
   };
 
   const recessedCanLuminaire = {
@@ -788,6 +886,98 @@ async function main() {
     accessoryDescriptionBQty: "",
     accessoryDescriptionCQty: "",
     wattage: "100",
+
+    // ── Recommended replacements (ProductDetails shape) ──────────────────────
+    fixtureRecommended: {
+      description: '6" LED Recessed Can Downlight NovaBright NBT-RC6-LED',
+      productType: "fixtures",
+      manufacturer: "NovaBright Technologies",
+      orderCode: "NBT-RC6-LED",
+      wattage: "12",
+      fixtureMount: "Recessed",
+      fixtureStyle: "Can",
+      fixtureApplication: "Indoor",
+      fixtureDescription: '6" LED Recessed Can Downlight',
+      fixtureMountHeight: "18",
+      fixtureLength: "14",
+      fixtureWidth: "15",
+      fixtureDepth: "12",
+      fixtureDiameter: "6",
+      fixtureLens: "Frosted",
+      fixturePricePerUnit: "95",
+      lumens: "1100",
+      cct: "3000K",
+      cri: "90",
+      lifetime: "50000",
+      dimmability: "0-10V",
+      ingressProtection: "IP 44",
+    },
+    lampRecommended: {
+      description: "LED PAR36 12W 3000K Screw E-26 ECO-PAR36-12K30",
+      productType: "lamp",
+      manufacturer: "EcoLux Lighting",
+      orderCode: "ECO-PAR36-12K30",
+      wattage: "12",
+      lampCategory: "PAR Series (Parabolic Aluminized Reflector)",
+      lampCategoryType: "PAR36",
+      lampWattage: "12",
+      lampColorTemperature: "3000",
+      lampBaseCategory: "Screw",
+      lampBaseCategoryType: "E-26",
+      lampLensType: "Frosted",
+      lampDescription: "LED PAR36 12W 3000K Screw E-26 ECO-PAR36-12K30",
+      lampProductCode: "ECO-PAR36-12K30",
+      lampPricePerUnit: "22",
+      lampPerFixture: "1",
+      lumens: "1050",
+      cct: "3000K",
+      cri: "90",
+      lifetime: "25000",
+    },
+    powerSupplyRecommended: {
+      description: "Standard LED Driver 12W PS Inc. PLX Series-PLX-S12",
+      productType: "power-supply",
+      manufacturer: "PS Inc.",
+      orderCode: "PLX-S12",
+      powerSupplyType: "Standard",
+      powerSupplyModel: "PLX Series",
+      powerSupplyManufacturer: "PS Inc.",
+      powerPricePerUnit: "14",
+      powerQTYFixture: "1",
+      powerSupplyDescription: "Standard PS Inc. PLX Series-PLX-S12",
+      powerSupplyProductCode: "PLX-S12",
+      wattage: "12",
+    },
+    controlRecommended: {
+      description: "Occupancy Sensor 0-10V PS INC. CTY-OSV2",
+      productType: "control",
+      manufacturer: "PS INC.",
+      orderCode: "CTY-OSV2",
+      controlType: "Occupancy Sensor",
+      controlModel: "CTY-OSV2",
+      controlDimming: "0-10V",
+      controlManufacturer: "PS INC.",
+      controlPricePerUnit: "35",
+      controlQTYFixture: "12",
+      controlDescription: "Occupancy Sensor PS INC. 0-10V CTY-OSV2",
+    },
+    accessoryRecommended: {
+      description: '6" LED Recessed Trim Ring PSI INC White PC-TR6W',
+      productType: "accessories",
+      manufacturer: "PSI INC",
+      orderCode: "PC-TR6W",
+      accessoryTypeA: "Trim Ring",
+      accessoryColorA: "White",
+      accessoryLengthA: "13",
+      accessoryWidthA: "12",
+      accessoryDepthA: "13",
+      accessoryDiameterA: "6",
+      accessoryManufacturerA: "PSI INC",
+      accessoryPricePerUnitA: "12",
+      accessoryDescriptionA: '6" LED Recessed Trim Ring PSI INC White PC-TR6W',
+      accessoryProductCodeA: "PC-TR6W",
+      accessoryDescriptionAQty: "1",
+    },
   };
 
   const defaultAreas = [
@@ -1094,10 +1284,9 @@ async function main() {
       marked_fulfilled: e.fulfilled,
       archived: false,
       created_at: e.created,
-      luminaires: [
-        { name: "LED Panel", quantity: 20 + Math.floor(Math.random() * 30), wattage: "40", unit_price: "185" },
-        { name: "Downlight", quantity: 10 + Math.floor(Math.random() * 20), wattage: "15", unit_price: "95" },
-      ],
+      luminaires: e.report_idx % 2 === 0
+        ? [surfaceGarageLuminaire, recessedCanLuminaire]
+        : [surfaceGarageLuminaire],
     }]);
     reuEstimates.push(row);
     console.log(`  ✓ ${e.ref} (REU - ${e.is_order ? "order" : "estimate"}${e.fulfilled ? ", fulfilled" : ""})`);
@@ -1150,9 +1339,11 @@ async function main() {
       archived: e.ref === "SU-2025-099",
       order_uid: e.is_order ? `ORD-${e.ref}` : null,
       created_at: e.created,
-      luminaires: [
-        { name: "LED Panel", quantity: 15 + Math.floor(Math.random() * 25), wattage: "40", unit_price: "185" },
-      ],
+      luminaires: e.report_idx % 3 === 0
+        ? [surfaceGarageLuminaire, recessedCanLuminaire]
+        : e.report_idx % 3 === 1
+          ? [recessedCanLuminaire]
+          : [surfaceGarageLuminaire],
     }]);
     suEstimates.push(row);
     console.log(`  ✓ ${e.ref} (SU - ${e.is_order ? "order" : "estimate"}${e.fulfilled ? ", fulfilled" : ""})`);
@@ -1578,7 +1769,15 @@ async function main() {
     { user_id: su3Id, fixture: 35, lamp: 16, control: 12, power_supply: 9, accessory: 6, companies: 1, updated_at: now },
     { user_id: su4Id, fixture: 28, lamp: 10, control: 8, power_supply: 6, accessory: 4, companies: 1, updated_at: now },
   ];
-  const catalogues = await insert("user_catalogue_counts", catalogueRows);
+  const { data: catalogueData, error: catalogueError } = await supabase
+    .from("user_catalogue_counts")
+    .upsert(catalogueRows, { onConflict: "user_id" })
+    .select();
+  if (catalogueError) {
+    const msg = catalogueError.message || catalogueError.code || JSON.stringify(catalogueError);
+    throw new Error(`insert(user_catalogue_counts): ${msg}`);
+  }
+  const catalogues = catalogueData ?? [];
   console.log(`  ✓ ${catalogues.length} catalogue count records`);
 
   // ── 13. Refresh materialized views ─────────────────────────────────────

@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/form';
 import { useProject } from '@/hooks/use-projects';
 import { useCreateReport, useUpdateReport, useReport } from '@/hooks/use-reports';
-import { Check, FileWarning, ExternalLink, ChevronDown, ChevronUp, X, Paperclip } from 'lucide-react';
+import { Check, FileWarning, ExternalLink, ChevronDown, ChevronUp, X, Paperclip, Hourglass } from 'lucide-react';
 import { ProductDetailsModal } from '@/components/shared/ProductDetailsModal';
 import { LuminaireRecommendationModal } from '@/components/shared/LuminaireRecommendationModal';
 
@@ -42,7 +42,7 @@ function buildLuminaireSummary(lum: Luminaire): string {
   if (lum.powerSupplyDescription) parts.push(`powered by ${lum.powerSupplyDescription}`);
   if (lum.controlDescription) parts.push(`controlled by ${lum.controlDescription}`);
   if (lum.accessoryDescriptionA) parts.push(`with ${lum.accessoryDescriptionA}`);
-  return parts.join(' , ') || 'â€”';
+  return parts.join(' , ') || '-';
 }
 
 function buildRecommendedSummary(
@@ -56,16 +56,13 @@ function buildRecommendedSummary(
 }
 
 function getLuminaireComponents(lum: Luminaire) {
-  const rows = [
-    { label: 'Fixture',       qty: lum.qty ?? 'â€”',                 description: lum.fixtureDescription ?? 'â€”' },
-    { label: 'Lamp',          qty: lum.lampPerFixture ?? 'â€”',       description: lum.lampDescription ?? 'â€”' },
-    { label: 'Power Supply',  qty: lum.powerQTYFixture ?? 'â€”',      description: lum.powerSupplyDescription ?? 'â€”' },
-    { label: 'Control',       qty: lum.controlQTYFixture ?? 'â€”',    description: lum.controlDescription ?? 'â€”' },
+  return [
+    { label: 'Fixture',       qty: lum.qty ?? '-',                description: lum.fixtureDescription ?? '-' },
+    { label: 'Lamp',          qty: lum.lampPerFixture ?? '-',     description: lum.lampDescription ?? '-' },
+    { label: 'Power Supply',  qty: lum.powerQTYFixture ?? '-',    description: lum.powerSupplyDescription ?? '-' },
+    { label: 'Control',       qty: lum.controlQTYFixture ?? '-',  description: lum.controlDescription ?? '-' },
+    { label: 'Accessory',     qty: lum.accessoryDescriptionAQty ?? '-', description: lum.accessoryDescriptionA ?? '-' },
   ];
-  if (lum.accessoryDescriptionA) {
-    rows.push({ label: 'Accessory', qty: lum.accessoryDescriptionAQty ?? '1', description: lum.accessoryDescriptionA });
-  }
-  return rows;
 }
 
 function ColumnHeaders() {
@@ -249,29 +246,27 @@ export default function CreateReport() {
     const components = getLuminaireComponents(lum);
     return (
       <div key={lumKey} className="mb-8">
-        {/* Summary row â€” always visible, same height both sides, click toggles accordion */}
+        {/* Summary row â€" always visible, same height both sides, click toggles accordion */}
         <div className="flex cursor-pointer gap-4" onClick={() => toggleLuminaire(lumKey)}>
           {/* Existing summary */}
           <div className="flex-1 p-4 bg-gray-50 hover:bg-gray-200 transition-colors border border-gray-200">
             <div className="grid grid-cols-[48px_1fr_64px] gap-2 text-xs items-start">
-              <span className="font-medium">{lum.qty ?? 'â€”'}</span>
+              <span className="font-medium">{lum.qty ?? '-'}</span>
               <span className="text-center text-gray-700 leading-snug">{buildLuminaireSummary(lum)}</span>
-              <span className="text-center text-gray-500">{lum.fixtureMountHeight ?? 'â€”'}</span>
+              <span className="text-center text-gray-500">{lum.fixtureMountHeight ?? '-'}</span>
             </div>
           </div>
           {/* Recommended summary or Add Recommendation */}
           {(() => {
             const baseKey = `${area.title ?? ''}-${li}`;
-            const hasRec = ['Fixture', 'Lamp', 'Power Supply', 'Control', 'Accessory'].some((label) => {
-              const v = recommendedSelections[`${baseKey}-${label}`];
-              return v != null;
-            });
+            const LABELS = ['Fixture', 'Lamp', 'Power Supply', 'Control', 'Accessory'];
+            const hasRec = LABELS.some((label) => recommendedSelections[`${baseKey}-${label}`] != null);
             return hasRec ? (
               <div className="flex-1 p-4 bg-gray-50 hover:bg-gray-200 transition-colors border border-[#619c48]">
                 <div className="grid grid-cols-[48px_1fr_64px] gap-2 text-xs items-start">
-                  <span className="font-medium">{lum.qty ?? 'â€”'}</span>
+                  <span className="font-medium">{lum.qty ?? '-'}</span>
                   <span className="text-center leading-snug">{buildRecommendedSummary(baseKey, recommendedSelections)}</span>
-                  <span className="text-center text-gray-500">{lum.fixtureMountHeight ?? 'â€”'}</span>
+                  <span className="text-center text-gray-500">{lum.fixtureMountHeight ?? '-'}</span>
                 </div>
               </div>
             ) : (
@@ -284,55 +279,77 @@ export default function CreateReport() {
           })()}
         </div>
 
-        {/* Accordion â€” component breakdown */}
+        {/* Accordion â€" component breakdown */}
         {isOpen && (
-          <div className="flex gap-4">
-            {/* Existing components */}
-            <div className="flex-1 px-4 py-3 border border-t-0 bg-gray-50">
-              <div className="grid grid-cols-[100px_56px_1fr] gap-2 text-xs font-bold text-gray-400 uppercase mb-2">
-                <span>Component</span><span>QTY</span><span>Description</span>
-              </div>
-              {components.map((c) => (
-                <div key={c.label} className="grid grid-cols-[100px_56px_1fr] gap-2 text-sm py-1 items-center">
-                  <span className="text-gray-600">{c.label}</span>
-                  <input readOnly value={c.qty} className="border border-gray-200 rounded px-2 py-0.5 text-xs w-full bg-gray-50" />
-                  <input
-                    readOnly
-                    value={c.description}
-                    className="border border-gray-200 rounded px-2 py-0.5 text-xs w-full bg-gray-50 cursor-pointer hover:bg-gray-100 hover:border-gray-400 transition-colors"
-                    onClick={() => setProductModal({ lum, label: c.label })}
-                  />
+          <>
+            {/* Headers */}
+            <div className="flex gap-4">
+              <div className="flex-1 px-4 pt-3 pb-2 border border-t-0 border-b-0 bg-gray-50">
+                <div className="grid grid-cols-[100px_56px_1fr] gap-2 text-xs font-bold text-gray-400 uppercase">
+                  <span>Component</span><span>QTY</span><span>Description</span>
                 </div>
-              ))}
-            </div>
-            {/* Recommended components */}
-            <div className="flex-1 px-4 py-3 border border-t-0 border-[#619c48] bg-gray-50">
-              <div className="grid grid-cols-[100px_56px_1fr_60px] gap-2 text-xs font-bold text-gray-400 uppercase mb-2">
-                <span>Component</span><span>QTY</span><span>Description</span><span></span>
               </div>
-              {components.map((c) => {
-                const recKey = `${area.title}-${li}-${c.label}`;
-                const recValue = recommendedSelections[recKey];
-                const isSelected = recValue != null;
-                const inputStyle = { borderColor: '#619c48', backgroundColor: isSelected ? '#dbfdce' : '' };
-                return (
-                <div key={c.label} className="grid grid-cols-[100px_56px_1fr_60px] gap-2 text-sm py-1 items-center">
-                  <span className="text-gray-600">{c.label}</span>
-                  <input readOnly value={c.qty} className="border rounded px-2 py-0.5 text-xs w-full bg-gray-50" style={inputStyle} />
-                  <input readOnly value={recValue?.details?.description ?? 'No Change'} className="border rounded px-2 py-0.5 text-xs w-full bg-gray-50" style={inputStyle} />
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-6 text-xs px-2 bg-yellow-400 hover:bg-yellow-500 text-gray-900"
-                    onClick={() => setRecommendationModal({ lum, label: c.label, areaTitle: area.title ?? '', lumIndex: li })}
-                  >
-                    <ExternalLink className="h-3 w-3 mr-1" />Edit
-                  </Button>
+              <div className="flex-1 px-4 pt-3 pb-2 border border-t-0 border-b-0 border-[#619c48] bg-gray-50">
+                <div className="grid grid-cols-[100px_56px_1fr] gap-2 text-xs font-bold text-gray-400 uppercase">
+                  <span>Component</span><span>QTY</span><span>Description</span>
                 </div>
-                );
-              })}
+              </div>
             </div>
-          </div>
+            {/* One row per component — both sides in the same flex row so heights always match */}
+            {components.map((c, cIdx) => {
+              const recKey = `${area.title}-${li}-${c.label}`;
+              const recValue = recommendedSelections[recKey];
+              const isSelected = recValue != null;
+              const isCustomRow = recValue?.details?.isCustomPrice === true;
+              const inputStyle = isCustomRow
+                ? { borderColor: '#ffe68d', backgroundColor: isSelected ? 'transparent' : '' }
+                : { borderColor: '#619c48', backgroundColor: isSelected ? '#dbfdce' : '' };
+              const isLast = cIdx === components.length - 1;
+              return (
+                <div key={c.label} className="flex gap-4">
+                  <div className={`flex-1 px-4 py-2 bg-gray-50 border-x${isLast ? ' border-b pb-4' : ''}`}>
+                    <div className="grid grid-cols-[100px_56px_1fr] gap-2 text-sm items-center h-full">
+                      <span className="text-gray-600">{c.label}</span>
+                      <input readOnly value={c.qty} className="border border-gray-200 rounded px-2 py-2 text-xs w-full bg-gray-50 text-center" />
+                      <input
+                        readOnly
+                        value={c.description}
+                        className="border border-gray-200 rounded px-2 py-2 text-xs w-full bg-gray-50 cursor-pointer hover:bg-gray-100 hover:border-gray-400 transition-colors"
+                        onClick={() => setProductModal({ lum, label: c.label })}
+                      />
+                    </div>
+                  </div>
+                  <div className={`flex-1 px-4 py-2 bg-gray-50 border-x border-[#619c48]${isLast ? ' border-b pb-4' : ''}`}>
+                    <div className="grid grid-cols-[100px_56px_1fr] gap-2 text-sm items-center h-full">
+                      <span className="text-gray-600">{c.label}</span>
+                      <input readOnly value={c.qty} className="border rounded px-2 py-2 text-xs w-full bg-gray-50 text-center" style={inputStyle} />
+                      <div
+                        className="relative flex items-center gap-2 border rounded px-2 py-2"
+                        style={{ borderColor: inputStyle.borderColor, backgroundColor: inputStyle.backgroundColor }}
+                      >
+                        {isCustomRow && (
+                          <span className="absolute -top-2 -right-2 flex items-center justify-center rounded-full" style={{ backgroundColor: '#ffe68d', width: '1.125rem', height: '1.125rem' }}>
+                            <Hourglass style={{ width: '0.7rem', height: '0.7rem' }} className="text-gray-900" />
+                          </span>
+                        )}
+                        <span className="flex-1 text-xs text-gray-700 truncate">
+                          {recValue?.details?.description ?? 'No Change'}
+                        </span>
+                        <button
+                          type="button"
+                          className="shrink-0 text-xs px-2 py-0.5 text-gray-900 rounded flex items-center gap-1"
+                          style={{ backgroundColor: '#ffe68d' }}
+                          onClick={() => setRecommendationModal({ lum, label: c.label, areaTitle: area.title ?? '', lumIndex: li })}
+                        >
+                          <ExternalLink className="h-3 w-3" />Edit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </>
         )}
       </div>
     );
@@ -615,7 +632,7 @@ export default function CreateReport() {
                       )}
                     </div>
 
-                    {/* Per-area breakdown â€” banner first, then that area's luminaires */}
+                    {/* Per-area breakdown â€" banner first, then that area's luminaires */}
                     {selectedAreas.map((area, areaIndex) => (
                       <div key={area.title}>
                         <div className="rounded-lg overflow-hidden mb-8">
@@ -722,6 +739,10 @@ export default function CreateReport() {
           lum={recommendationModal.lum}
           componentLabel={recommendationModal.label}
           companyId={project?.company_id}
+          customPricing={
+            existingReportData?.report?.custom_pricing as
+              { fixture?: boolean; lamp?: boolean; power?: boolean; control?: boolean; accessory?: boolean } | null
+          }
           onSave={(componentLabel, _qty, product) => {
             const key = `${recommendationModal.areaTitle}-${recommendationModal.lumIndex}-${componentLabel}`;
             setRecommendedSelections((prev) => ({ ...prev, [key]: product }));

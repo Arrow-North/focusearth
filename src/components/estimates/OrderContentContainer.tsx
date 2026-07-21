@@ -1,6 +1,6 @@
 import type { EstimateDetail } from '@/types/database';
 import LogoIcon from '@/assets/LogoIconImage.png';
-import { useState, forwardRef } from 'react';
+import { useState, useMemo, forwardRef } from 'react';
 import { Pencil, Check } from 'lucide-react';
 import { SignatureModal } from './SignatureModal';
 import { useAuth } from '@/hooks/useAuth';
@@ -12,6 +12,84 @@ interface OrderContentContainer {
   estimate: EstimateDetail;
   className?: string;
   isSU?: boolean;
+}
+
+interface OrderLineItem {
+  description: string;
+  partNumber: string;
+  qty: number;
+  pricePerUnit: number;
+  amount: number;
+}
+
+/** Read a string field off a recommended-product spec (fn_get_estimate luminaire sub-object). */
+function specStr(obj: unknown, ...keys: string[]): string {
+  if (!obj || typeof obj !== 'object') return '';
+  const o = obj as Record<string, unknown>;
+  for (const key of keys) {
+    const v = o[key];
+    if (v != null && v !== '') return String(v);
+  }
+  return '';
+}
+
+/** Read a numeric field off a recommended-product spec, stripping non-numeric chars (e.g. "$"). */
+function specNum(obj: unknown, ...keys: string[]): number {
+  if (!obj || typeof obj !== 'object') return 0;
+  const o = obj as Record<string, unknown>;
+  for (const key of keys) {
+    const v = o[key];
+    if (v != null && v !== '') {
+      const n = parseFloat(String(v).replace(/[^0-9.]/g, ''));
+      if (!isNaN(n)) return n;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Each luminaire can carry up to 5 independently-recommended components. `qtyMultiplierKey`
+ * is the per-fixture count field for that component (e.g. lamps per fixture); `null` means
+ * the component's qty is 1:1 with the fixture count (Fixture itself has no multiplier).
+ */
+const RECOMMENDED_COMPONENTS: {
+  recKey: string;
+  descFallbackKey: string;
+  qtyMultiplierKey: string | null;
+}[] = [
+  { recKey: 'fixtureRecommended',     descFallbackKey: 'fixtureDescription',     qtyMultiplierKey: null },
+  { recKey: 'lampRecommended',        descFallbackKey: 'lampDescription',        qtyMultiplierKey: 'lampPerFixture' },
+  { recKey: 'powerSupplyRecommended', descFallbackKey: 'powerSupplyDescription', qtyMultiplierKey: 'powerQTYFixture' },
+  { recKey: 'controlRecommended',     descFallbackKey: 'controlDescription',     qtyMultiplierKey: 'controlQTYFixture' },
+  { recKey: 'accessoryRecommended',   descFallbackKey: 'accessoryDescriptionA',  qtyMultiplierKey: 'accessoryDescriptionAQty' },
+];
+
+/**
+ * One Order Information row per recommended component (Fixture/Lamp/Power Supply/
+ * Control/Accessory) present on each luminaire — a luminaire with several recommended
+ * components produces several rows. Components with no recommendation are skipped.
+ */
+function buildOrderItems(luminaires: Record<string, unknown>[]): OrderLineItem[] {
+  return luminaires.flatMap((lum) => {
+    const fixtureQty = specNum(lum, 'qty');
+
+    return RECOMMENDED_COMPONENTS.flatMap(({ recKey, descFallbackKey, qtyMultiplierKey }) => {
+      const rec = lum[recKey];
+      if (!rec || typeof rec !== 'object') return [];
+
+      const multiplier = qtyMultiplierKey ? specNum(lum, qtyMultiplierKey) || 1 : 1;
+      const qty = fixtureQty * multiplier;
+      const pricePerUnit = specNum(rec, 'customPricePerUnit', 'pricePerUnit');
+
+      return [{
+        description: specStr(rec, 'description', descFallbackKey),
+        partNumber: specStr(rec, 'orderCode'),
+        qty,
+        pricePerUnit,
+        amount: qty * pricePerUnit,
+      }];
+    });
+  });
 }
 
 export const OrderContentContainer = forwardRef<HTMLDivElement, OrderContentContainer>(function OrderContentContainer({
@@ -62,24 +140,6 @@ export const OrderContentContainer = forwardRef<HTMLDivElement, OrderContentCont
       country: 'USA',
       phone: '925-323-0053',
     },
-    items: [
-      {
-        description: '6.0"x6" Can Acryle 10W 1000L 3500k 83CRI 7ETA',
-        partNumber: 'F ABC1O8',
-        qty: 100,
-        pricePerUnit: 22.5,
-        amount: 2250.0,
-      },
-      {
-        description: '6"x6" Metal Halide E 40 40W 400L OtherK 90CRI 34ETA',
-        partNumber: 'L ABC1S3',
-        qty: 350,
-        pricePerUnit: 5,
-        amount: 1750.0,
-      },
-    ],
-    subTotal: 4000.0,
-    total: 4000.0,
     printName: 'Pete SU Musser',
     signatureDate: '05/23/2026',
   };
@@ -96,7 +156,11 @@ export const OrderContentContainer = forwardRef<HTMLDivElement, OrderContentCont
     phone: '(925) 323-0053',
   };
 
-  const subTotal = DUMMY.items.reduce((acc, item) => acc + item.amount, 0);
+  const orderItems = useMemo(
+    () => buildOrderItems(estimate.luminaires ?? []),
+    [estimate.luminaires],
+  );
+  const subTotal = orderItems.reduce((acc, item) => acc + item.amount, 0);
   const total = subTotal + (parseFloat(salesTaxDraft) || 0) + (parseFloat(shippingCostDraft) || 0);
   const remainderAmount = total - (parseFloat(depositAmountDraft) || 0);
 
@@ -201,19 +265,30 @@ export const OrderContentContainer = forwardRef<HTMLDivElement, OrderContentCont
                 </tr>
               </thead>
               <tbody>
-                {DUMMY.items.map((item, i) => (
-                  <tr key={i}>
-                    <td className="py-3 px-3 border-y border-l border-gray-300 rounded-l-md">{item.description}</td>
-                    <td className="py-3 px-3 border-y border-gray-300 text-center">{item.partNumber}</td>
-                    <td className="py-3 px-3 text-center text-slate-700 border-y border-gray-300 text-center">{item.qty}</td>
-                    <td className="py-3 px-3 text-slate-700 border-y border-gray-300 text-center">
-                      ${item.pricePerUnit}
-                    </td>
-                    <td className="py-3 px-3 pr-[3.5rem] text-right font-medium text-slate-800 border-y border-r border-gray-300 rounded-r-md">
-                      {formatCurrency(item.amount)}
+                {orderItems.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="py-3 px-3 border border-gray-300 rounded-md text-center text-slate-500"
+                    >
+                      No recommended products on this estimate.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  orderItems.map((item, i) => (
+                    <tr key={i}>
+                      <td className="py-3 px-3 border-y border-l border-gray-300 rounded-l-md">{item.description}</td>
+                      <td className="py-3 px-3 border-y border-gray-300 text-center">{item.partNumber}</td>
+                      <td className="py-3 px-3 text-center text-slate-700 border-y border-gray-300 text-center">{item.qty}</td>
+                      <td className="py-3 px-3 text-slate-700 border-y border-gray-300 text-center">
+                        ${item.pricePerUnit}
+                      </td>
+                      <td className="py-3 px-3 pr-[3.5rem] text-right font-medium text-slate-800 border-y border-r border-gray-300 rounded-r-md">
+                        {formatCurrency(item.amount)}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

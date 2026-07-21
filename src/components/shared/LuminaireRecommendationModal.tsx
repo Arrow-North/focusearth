@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,14 @@ import type { Luminaire, Product } from '@/types/database';
 import { useAuth } from '@/hooks/useAuth';
 import { useProducts } from '@/hooks/use-products';
 
+export interface CustomPricing {
+  fixture?: boolean;
+  lamp?: boolean;
+  power?: boolean;
+  control?: boolean;
+  accessory?: boolean;
+}
+
 export interface LuminaireRecommendationModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -22,8 +30,62 @@ export interface LuminaireRecommendationModalProps {
   componentLabel: string;
   /** Explicit supplier company scope. Falls back to the auth user's own company. */
   companyId?: number | null;
+  /** Report-level custom pricing flags — pre-fills the "Show Custom Price" checkbox per component. */
+  customPricing?: CustomPricing | null;
   onSave?: (label: string, qty: string, product: Product | null) => void;
 }
+
+const CUSTOM_PRICING_KEY: Record<ComponentLabel, keyof CustomPricing> = {
+  Fixture:       'fixture',
+  Lamp:          'lamp',
+  'Power Supply':'power',
+  Control:       'control',
+  Accessory:     'accessory',
+};
+
+interface CustomPriceItem {
+  id: number;
+  description: string;
+  customPricePerUnit: string;
+}
+
+const DUMMY_CUSTOM_PRICES: Record<ComponentLabel, CustomPriceItem[]> = {
+  Fixture: [
+    { id: 9001, description: 'Custom LED Fixture - Surface Mount 2x4', customPricePerUnit: '48.00' },
+    { id: 9002, description: 'Custom LED Fixture - Recessed Downlight 6"', customPricePerUnit: '35.50' },
+    { id: 9003, description: 'Custom LED Fixture - Linear Strip 4ft', customPricePerUnit: '62.00' },
+    { id: 9004, description: 'Custom LED Fixture - High Bay 150W', customPricePerUnit: '120.00' },
+    { id: 9005, description: 'Custom LED Fixture - Wall Pack 40W', customPricePerUnit: '75.00' },
+  ],
+  Lamp: [
+    { id: 9011, description: 'Custom LED Lamp - T8 4ft 18W 5000K', customPricePerUnit: '8.50' },
+    { id: 9012, description: 'Custom LED Lamp - A19 9W 3000K', customPricePerUnit: '4.25' },
+    { id: 9013, description: 'Custom LED Lamp - PAR38 18W 4000K', customPricePerUnit: '14.00' },
+    { id: 9014, description: 'Custom LED Lamp - MR16 7W 2700K', customPricePerUnit: '6.75' },
+    { id: 9015, description: 'Custom LED Lamp - T5HO 4ft 24W 5000K', customPricePerUnit: '10.50' },
+  ],
+  'Power Supply': [
+    { id: 9021, description: 'Custom Driver - 0-10V Dimmable 40W', customPricePerUnit: '22.00' },
+    { id: 9022, description: 'Custom Driver - Constant Current 350mA', customPricePerUnit: '18.50' },
+    { id: 9023, description: 'Custom Driver - Emergency Backup 90min', customPricePerUnit: '55.00' },
+    { id: 9024, description: 'Custom Driver - DALI 60W', customPricePerUnit: '34.00' },
+    { id: 9025, description: 'Custom Driver - Phase Dimming 25W', customPricePerUnit: '16.00' },
+  ],
+  Control: [
+    { id: 9031, description: 'Custom Occupancy Sensor - PIR 180°', customPricePerUnit: '28.00' },
+    { id: 9032, description: 'Custom Daylight Sensor - Analog 0-10V', customPricePerUnit: '42.00' },
+    { id: 9033, description: 'Custom Smart Switch - Zigbee', customPricePerUnit: '38.00' },
+    { id: 9034, description: 'Custom Wireless Dimmer - 0-10V', customPricePerUnit: '52.00' },
+    { id: 9035, description: 'Custom Timer Control - 7-Day', customPricePerUnit: '24.00' },
+  ],
+  Accessory: [
+    { id: 9041, description: 'Custom Mounting Bracket - Adjustable Arm', customPricePerUnit: '12.00' },
+    { id: 9042, description: 'Custom Lens - Frosted Diffuser Panel', customPricePerUnit: '9.50' },
+    { id: 9043, description: 'Custom Guard - Wire Cage', customPricePerUnit: '15.00' },
+    { id: 9044, description: 'Custom Emergency Battery Pack', customPricePerUnit: '45.00' },
+    { id: 9045, description: 'Custom Wireway - 4ft Section', customPricePerUnit: '18.00' },
+  ],
+};
 
 const COMPONENT_ORDER = ['Accessory', 'Fixture', 'Lamp', 'Power Supply', 'Control'] as const;
 type ComponentLabel = (typeof COMPONENT_ORDER)[number];
@@ -97,11 +159,16 @@ export function LuminaireRecommendationModal({
   lum,
   componentLabel,
   companyId: propCompanyId,
+  customPricing,
   onSave,
 }: LuminaireRecommendationModalProps) {
   const [currentLabel, setCurrentLabel] = useState<string>(componentLabel);
   const qty = lum.qty ?? '';
   const [selectedProductId, setSelectedProductId] = useState<string>('no-change');
+
+  const getCustomPricingDefault = (label: string) =>
+    !!(customPricing?.[CUSTOM_PRICING_KEY[label as ComponentLabel]]);
+
   const [filters, setFilters] = useState({
     wattageMin: '',
     wattageMax: '',
@@ -113,7 +180,7 @@ export function LuminaireRecommendationModal({
     priceMax: '',
     certification: '',
     dimmability: '',
-    showCustomPrice: false,
+    showCustomPrice: getCustomPricingDefault(componentLabel),
     buyAmerican: false,
     type: '',
     manufacturer: '',
@@ -124,6 +191,12 @@ export function LuminaireRecommendationModal({
     dimensionsDepth: '',
     dimensionsDiameter: '',
   });
+
+  // Sync showCustomPrice default + reset product selection when navigating components
+  useEffect(() => {
+    setFilter('showCustomPrice', getCustomPricingDefault(currentLabel));
+    setSelectedProductId('no-change');
+  }, [currentLabel]);
 
   const { companyId: authCompanyId } = useAuth();
   const resolvedCompanyId = propCompanyId !== undefined ? propCompanyId : authCompanyId;
@@ -137,9 +210,33 @@ export function LuminaireRecommendationModal({
   const recommendedOptions = (productsData?.rows ?? []).filter(
     (p) => p.airtable_colum_name === CATEGORY_MAP[currentLabel as ComponentLabel],
   );
-  const selectedProduct = selectedProductId === 'no-change'
-    ? null
-    : recommendedOptions.find((p) => String(p.id) === selectedProductId) ?? null;
+
+  // When custom price is enabled, swap the dropdown to show dummy custom-price items.
+  const displayOptions: { value: string; label: string }[] = filters.showCustomPrice
+    ? DUMMY_CUSTOM_PRICES[currentLabel as ComponentLabel].map((item) => ({
+        value: `custom-${item.id}`,
+        label: `${item.description} — $${item.customPricePerUnit}`,
+      }))
+    : recommendedOptions.map((product) => ({
+        value: String(product.id),
+        label: getProductLabel(product, currentLabel as ComponentLabel) || `Product #${product.id}`,
+      }));
+  const selectedProduct: Product | null = (() => {
+    if (selectedProductId === 'no-change') return null;
+    if (selectedProductId.startsWith('custom-')) {
+      const customId = Number(selectedProductId.replace('custom-', ''));
+      const item = DUMMY_CUSTOM_PRICES[currentLabel as ComponentLabel].find((i) => i.id === customId);
+      if (!item) return null;
+      return {
+        id: item.id,
+        user_id: null, company_id: null, project_id: null, report_id: null, estimate_su_id: null,
+        airtable_record: '', airtable_base: null, airtable_colum_name: '',
+        is_existing: false, created_at: '', updated_at: null,
+        details: { description: item.description, customPricePerUnit: item.customPricePerUnit, isCustomPrice: true },
+      };
+    }
+    return recommendedOptions.find((p) => String(p.id) === selectedProductId) ?? null;
+  })();
 
   const currentIndex = COMPONENT_ORDER.indexOf(currentLabel as ComponentLabel);
   const prevLabel = COMPONENT_ORDER[(currentIndex - 1 + COMPONENT_ORDER.length) % COMPONENT_ORDER.length];
@@ -240,14 +337,11 @@ export function LuminaireRecommendationModal({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="no-change">No Change</SelectItem>
-                  {recommendedOptions.map((product) => {
-                    const label = getProductLabel(product, currentLabel as ComponentLabel);
-                    return (
-                      <SelectItem key={product.id} value={String(product.id)}>
-                        {label || `Product #${product.id}`}
-                      </SelectItem>
-                    );
-                  })}
+                  {displayOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -385,7 +479,10 @@ export function LuminaireRecommendationModal({
                 <Checkbox
                   id="custom-price"
                   checked={filters.showCustomPrice}
-                  onCheckedChange={(v) => setFilter('showCustomPrice', !!v)}
+                  onCheckedChange={(v) => {
+                    setFilter('showCustomPrice', !!v);
+                    setSelectedProductId('no-change');
+                  }}
                 />
                 <label htmlFor="custom-price" className="text-sm text-gray-600 cursor-pointer">
                   Yes
