@@ -14,14 +14,17 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Upload, Database, FileUp, CheckCircle, X, ArrowLeft, Inbox } from 'lucide-react';
 
+const CONTACT_SUBMISSIONS_PAGE_SIZE = 25;
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { userType } = useAuth();
+  const [contactSubmissionsPage, setContactSubmissionsPage] = useState(1);
   const {
     data: contactSubmissions,
     isLoading: contactSubmissionsLoading,
     error: contactSubmissionsError,
-  } = useContactSubmissions();
+  } = useContactSubmissions(contactSubmissionsPage, CONTACT_SUBMISSIONS_PAGE_SIZE);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -128,6 +131,17 @@ export default function AdminDashboard() {
     </Button>
   );
 
+  const contactSubmissionsTotalPages = Math.max(
+    1,
+    Math.ceil((contactSubmissions?.total_count ?? 0) / CONTACT_SUBMISSIONS_PAGE_SIZE),
+  );
+  const contactSubmissionsFirstItem =
+    (contactSubmissionsPage - 1) * CONTACT_SUBMISSIONS_PAGE_SIZE + 1;
+  const contactSubmissionsLastItem = Math.min(
+    contactSubmissionsPage * CONTACT_SUBMISSIONS_PAGE_SIZE,
+    contactSubmissions?.total_count ?? 0,
+  );
+
   return (
     <DashboardLayout title="Admin Dashboard" showSearch={false} actions={headerActions}>
       <div className="space-y-6">
@@ -196,61 +210,89 @@ export default function AdminDashboard() {
           )}
 
           {!contactSubmissionsLoading && !contactSubmissionsError && !!contactSubmissions?.rows.length && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-6 py-3 font-medium">Submitted</th>
-                    <th className="px-6 py-3 font-medium">User</th>
-                    <th className="px-6 py-3 font-medium">Company</th>
-                    <th className="px-6 py-3 font-medium">Subject</th>
-                    <th className="px-6 py-3 font-medium">Assigned To</th>
-                    <th className="px-6 py-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {contactSubmissions.rows.map((submission) => {
-                    const submitterType = submission.submitter?.type ?? 'User';
-                    const assigneeName = submission.assignee
-                      ? [submission.assignee.first_name, submission.assignee.last_name].filter(Boolean).join(' ')
-                      : '';
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-6 py-3 font-medium">Submitted</th>
+                      <th className="px-6 py-3 font-medium">User</th>
+                      <th className="px-6 py-3 font-medium">Company</th>
+                      <th className="px-6 py-3 font-medium">Subject</th>
+                      <th className="px-6 py-3 font-medium">Assigned To</th>
+                      <th className="px-6 py-3 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {contactSubmissions.rows.map((submission) => {
+                      const submitterType = submission.submitter?.type ?? 'User';
+                      const assigneeName = submission.assignee
+                        ? [submission.assignee.first_name, submission.assignee.last_name].filter(Boolean).join(' ')
+                        : '';
 
-                    return (
-                      <tr key={submission.id} className="align-top">
-                        <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">
-                          {new Date(submission.created_at).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="font-medium text-gray-900">{submission.name}</div>
-                          <div className="text-muted-foreground">{submission.email}</div>
-                          <div className="text-muted-foreground">{submission.phone}</div>
-                          <div className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
-                            {submitterType}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-gray-700">
-                          {submission.company_name || '-'}
-                        </td>
-                        <td className="min-w-[16rem] px-6 py-4">
-                          <div className="font-medium text-gray-900">{submission.subject}</div>
-                          <p className="mt-1 max-w-md whitespace-pre-wrap text-muted-foreground">
-                            {submission.message}
-                          </p>
-                        </td>
-                        <td className="px-6 py-4 text-gray-700">
-                          {assigneeName || submission.assignee?.email || 'Unassigned'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="inline-flex rounded-full bg-amber-50 px-2 py-1 text-xs font-medium capitalize text-amber-700">
-                            {submission.status}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      return (
+                        <tr key={submission.id} className="align-top">
+                          <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">
+                            {new Date(submission.created_at).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="font-medium text-gray-900">{submission.name}</div>
+                            <div className="text-muted-foreground">{submission.email}</div>
+                            <div className="text-muted-foreground">{submission.phone}</div>
+                            <div className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                              {submitterType}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-gray-700">
+                            {submission.company_name || '-'}
+                          </td>
+                          <td className="min-w-[16rem] px-6 py-4">
+                            <div className="font-medium text-gray-900">{submission.subject}</div>
+                            <p className="mt-1 max-w-md whitespace-pre-wrap text-muted-foreground">
+                              {submission.message}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4 text-gray-700">
+                            {assigneeName || submission.assignee?.email || 'Unassigned'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="inline-flex rounded-full bg-amber-50 px-2 py-1 text-xs font-medium capitalize text-amber-700">
+                              {submission.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {contactSubmissionsTotalPages > 1 && (
+                <div className="flex flex-col gap-3 border-t border-gray-200 px-6 py-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    Showing {contactSubmissionsFirstItem}–{contactSubmissionsLastItem} of {contactSubmissions.total_count}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={contactSubmissionsPage === 1}
+                      onClick={() => setContactSubmissionsPage((page) => page - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={contactSubmissionsPage === contactSubmissionsTotalPages}
+                      onClick={() => setContactSubmissionsPage((page) => page + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

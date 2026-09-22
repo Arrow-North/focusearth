@@ -39,13 +39,13 @@ export function useSubmitContactSubmission() {
   });
 }
 
-export function useContactSubmissions() {
+export function useContactSubmissions(page = 1, pageSize = 25) {
   return useQuery({
-    queryKey: ['contact-submissions'],
+    queryKey: ['contact-submissions', page, pageSize],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('fn_list_contact_submissions', {
-        p_page: 1,
-        p_page_size: 100,
+        p_page: page,
+        p_page_size: pageSize,
       });
 
       if (error) throw error;
