@@ -43,6 +43,7 @@ import EstimateDetail from "./pages/estimates/EstimateDetail";
 import CreateEstimate from "./pages/estimates/CreateEstimate";
 import Analytics from "./pages/Analytics";
 import LEDCatalogueImport from "./pages/LEDCatalogueImport";
+import CatalogueImport from "./pages/CatalogueImport";
 import AdminDashboard from './pages/AdminDashboard';
 import Upload from './pages/Upload';
 import Contact from './pages/Contact';
@@ -96,6 +97,13 @@ const App = () => (
               <ProtectedRoute>
                 <RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au']}>
                   <LEDCatalogueImport />
+                </RoleGuard>
+              </ProtectedRoute>
+            } />
+            <Route path="/catalogues/import/products" element={
+              <ProtectedRoute>
+                <RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au']}>
+                  <CatalogueImport />
                 </RoleGuard>
               </ProtectedRoute>
             } />
