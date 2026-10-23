@@ -25,3 +25,6 @@ dist-ssr
 
 /prompts
 /local
+# Deno lockfile generated when type-checking Supabase edge functions locally.
+# Supabase deploys do not consume it.
+deno.lock

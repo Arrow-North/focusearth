@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "db:reset": "supabase db reset && npx tsx supabase/seed.ts",
-    "db:seed": "npx tsx supabase/seed.ts"
+    "db:seed": "npx tsx supabase/seed.ts",
+    "test:import": "tsx src/lib/catalogue-import/__tests__/link-classifier.fixtures.ts && tsx src/lib/catalogue-import/__tests__/parser.fixtures.ts && tsx src/lib/catalogue-import/__tests__/output.fixtures.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

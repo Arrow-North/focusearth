@@ -1,7 +1,15 @@
 import { useNavigate } from "react-router-dom";
-import { Upload } from "lucide-react";
+import { ChevronDown, Upload } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CATALOGUE_CATEGORIES } from "@/lib/catalogues";
 import { useCategoryCounts } from "@/hooks/use-products";
 import { useAuth } from "@/hooks/useAuth";
@@ -22,10 +30,38 @@ export default function Catalogues() {
       title="Catalogues"
       actions={
         isAdminUser && (
-          <Button onClick={() => navigate("/catalogues/import")} size="sm">
-            <Upload className="h-4 w-4 mr-2" />
-            Import
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm">
+                <Upload className="h-4 w-4 mr-2" />
+                Import
+                <ChevronDown className="h-4 w-4 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel>Import</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="flex-col items-start gap-0.5"
+                onClick={() => navigate("/catalogues/import/products")}
+              >
+                <span className="font-medium">Products with assets</span>
+                <span className="text-xs text-muted-foreground">
+                  CSV or Excel for one company and luminaire type. Mirrors
+                  images and spec sheets to storage and returns a CSV.
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="flex-col items-start gap-0.5"
+                onClick={() => navigate("/catalogues/import")}
+              >
+                <span className="font-medium">LED catalogue workbook</span>
+                <span className="text-xs text-muted-foreground">
+                  Multi-sheet XLSM import.
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )
       }
     >
