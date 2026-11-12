@@ -95,7 +95,7 @@ const App = () => (
             <Route path="/catalogues/companies" element={<Navigate to="/companies" replace />} />
             <Route path="/catalogues/import" element={
               <ProtectedRoute>
-                <RoleGuard allowedRoles={['SUPERADMIN', 'Sa', 'Au']}>
+                <RoleGuard allowedRoles={['SUPERADMIN']}>
                   <LEDCatalogueImport />
                 </RoleGuard>
               </ProtectedRoute>

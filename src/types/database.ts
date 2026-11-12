@@ -587,6 +587,8 @@ export interface ProductDetails {
   // ── General ─────────────────────────────────────────────
   description?: string;
   isCustomPrice?: boolean;
+  baseCategory?: string;
+  color?: string;
   supplier?: string;
   productType?: string;
   type?: string;
@@ -751,6 +753,9 @@ export interface ProductDetails {
   installationInstructions?: string;
   productImage?: string;
   compatibleOrderCodes?: string;
+  iesFile?: string;
+  compatibleBallastCodes?: string;
+  lampsPowered?: string;
 }
 
 export type ProductCategory = 'fixtures' | 'lamp' | 'control' | 'power-supply' | 'accessories';

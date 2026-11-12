@@ -41,23 +41,24 @@ export default function Catalogues() {
             <DropdownMenuContent align="end" className="w-72">
               <DropdownMenuLabel>Import</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {userType === 'SUPERADMIN' && <DropdownMenuItem
+                className="flex-col items-start gap-0.5"
+                onClick={() => navigate("/catalogues/import")}
+              >
+                <span className="font-medium">Supplier catalogue</span>
+                <span className="text-xs text-muted-foreground">
+                  Save products, review duplicates, and choose files from public
+                  Dropbox links. A product image is required.
+                </span>
+              </DropdownMenuItem>}
               <DropdownMenuItem
                 className="flex-col items-start gap-0.5"
                 onClick={() => navigate("/catalogues/import/products")}
               >
-                <span className="font-medium">Products with assets</span>
+                <span className="font-medium">Resolve assets to CSV</span>
                 <span className="text-xs text-muted-foreground">
                   CSV or Excel for one company and luminaire type. Mirrors
                   images and spec sheets to storage and returns a CSV.
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="flex-col items-start gap-0.5"
-                onClick={() => navigate("/catalogues/import")}
-              >
-                <span className="font-medium">LED catalogue workbook</span>
-                <span className="text-xs text-muted-foreground">
-                  Multi-sheet XLSM import.
                 </span>
               </DropdownMenuItem>
             </DropdownMenuContent>
