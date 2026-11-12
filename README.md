@@ -13,7 +13,7 @@ A comprehensive LED lighting solutions and energy management platform.
 
 ### Prerequisites
 
-- Node.js 18+ (install with [nvm](https://github.com/nvm-sh/nvm#installing-and-updating))
+- Node.js 22.12+ (verified with 22.23.0; install with [nvm](https://github.com/nvm-sh/nvm#installing-and-updating))
 - npm or yarn
 - Supabase CLI (for local development)
 
@@ -101,6 +101,38 @@ npm run build
 ```
 
 Deploy the `dist/` folder to your hosting provider (Vercel, Netlify, etc.).
+
+### Cloudflare Workers
+
+The frontend uses Workers Static Assets. `wrangler.jsonc` serves the Vite output in `dist/` and falls back to `index.html` for SPA navigation, including catalogue and authentication routes. This explicit configuration avoids Wrangler's automatic Vite-adapter setup, which rejects this project's Vite 5 version. Vite 5.4.19 remains the frontend build tool; no Cloudflare Vite plugin or server Worker is needed for this Supabase-backed SPA. See [Cloudflare SPA configuration](https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/).
+
+In **Workers & Pages → your Worker → Settings → Builds**, configure:
+
+| Setting | Value |
+| --- | --- |
+| Repository branch | `main` |
+| Root directory | Repository root |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+| Build variable `NODE_VERSION` | `22.23.0` |
+| Build variable `VITE_SUPABASE_URL` | Your Supabase project URL |
+| Build variable `VITE_SUPABASE_ANON_KEY` | Your Supabase public anon key |
+
+The `name` in `wrangler.jsonc` must match your existing Worker name; it currently defaults to `focusearth`. Frontend variables must be configured for the build, since Vite embeds them into the browser bundle. Runtime-only Worker variables do not update a previously built frontend. Keep Dropbox and Supabase service-role credentials in the Supabase backend.
+
+Local verification and deployment commands:
+
+```sh
+npm ci
+npm run deploy:cloudflare:check
+npm run preview:cloudflare
+# Publish only when ready:
+npm run deploy:cloudflare
+```
+
+The check command builds and validates the deployment with `wrangler deploy --dry-run` without publishing. The preview command serves the built files through the local Cloudflare emulator. Production deployment requires Cloudflare authentication. These frontend deployment commands do not apply Supabase migrations or deploy its Edge Functions.
+
+Verified on 2026-11-12 with Node 22.23.0, Vite 5.4.19, and Wrangler 4.161.0: production build, Wrangler deployment dry run, lockfile validation, and local static asset serving passed. Local navigation to `/catalogues/import`, `/catalogues/import/products`, and `/projects/123` returned the SPA entry point. No Cloudflare deployment was performed during verification.
 
 ## Supplier Catalogue Imports
 
