@@ -104,7 +104,7 @@ Deploy the `dist/` folder to your hosting provider (Vercel, Netlify, etc.).
 
 ## Supplier Catalogue Imports
 
-Super admins can import supplier CSV/Excel catalogues, review duplicates, choose files from Dropbox collections, and upload a required product image manually when necessary. See [catalogue import setup and verification](docs/catalogue-import.md) for deployment, credentials, supported formats, and limits.
+Super admins can import supplier CSV catalogues, review duplicates, choose files from Dropbox collections, and upload a required product image manually when necessary. See [catalogue import setup and verification](docs/catalogue-import.md) for deployment, credentials, supported formats, and limits.
 
 ## License
 

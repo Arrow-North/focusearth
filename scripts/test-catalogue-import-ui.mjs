@@ -91,10 +91,14 @@ export async function run() {
     await act(async () => root.render(<QueryClientProvider client={queryClient}><CataloguePage /></QueryClientProvider>));
     const fileInput = document.querySelector('[aria-label="Catalogue file"]');
     check(fileInput.disabled, 'CSV selection is disabled before supplier selection');
+    check(fileInput.accept === '.csv', 'supplier catalogue picker accepts CSV files only');
     await click(findButton('More suppliers'));
     check(companyQueries.some(filters => filters.page === 2), 'supplier pagination requests the next page');
     await change(document.getElementById('supplier-company'), '42');
     check(!fileInput.disabled, 'CSV selection enables only after choosing supplier');
+    await upload(fileInput, new File(['unsupported workbook'], 'Fixtures.xlsm'));
+    check(document.body.textContent.includes('Only CSV files are supported'), 'Excel workbooks are explicitly rejected');
+    check(requests.length === 0, 'unsupported uploads never reach duplicate lookup or import');
     const csv = [
       'FIXTURES,,,,,,', ',,,,,,',
       'Manufacturer,Order Code,Product Description,Specifications (hyperlink),Installation Instructions (hyperlink),Product Image (hyperlink),Notes',

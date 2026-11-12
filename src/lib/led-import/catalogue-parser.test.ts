@@ -100,9 +100,23 @@ test('preview flags overlong order codes and long filenames cannot overflow row 
 
 test('file validation rejects unsupported formats and excessive sizes', async () => {
   const input = { name: 'file.pdf', arrayBuffer: async () => new ArrayBuffer(0) };
-  await assert.rejects(parseCatalogueFile(input), /Choose a CSV/);
+  for (const name of ['Fixtures.xlsm', 'Fixtures.xlsx', 'Fixtures.xls', 'Fixtures.pdf', 'Fixtures.tsv', 'Fixtures.csv.exe', 'Fixtures']) {
+    await assert.rejects(parseCatalogueFile({ name, arrayBuffer: async () => assert.fail('Unsupported files must be rejected before reading.') }), /Only CSV files are supported/);
+  }
   await assert.rejects(parseCatalogueFile({ ...input, name: 'Fixtures.csv', size: 21 * 1024 * 1024 }), /20 MB/);
   assert.deepEqual(await parseCatalogueFile({ ...input, name: 'Introduction-Table 1.csv' }), []);
+});
+
+test('CSV file upload accepts uppercase extensions and parses product fields', async () => {
+  const file = new File([csv([
+    ['Manufacturer', 'Order Code', 'Product Image (hyperlink)'],
+    ['Euri', '00012', fileLink],
+  ])], 'Fixtures.CSV', { type: 'text/csv' });
+  const files = await parseCatalogueFile(file);
+  assert.equal(files.length, 1);
+  assert.equal(files[0].category, 'fixtures');
+  assert.equal(files[0].rows[0].orderCode, '00012');
+  assert.equal(files[0].rows[0].links[0].url, fileLink);
 });
 
 // Set CATALOGUE_TEMPLATE_DIR to verify the supplied external fixture without copying

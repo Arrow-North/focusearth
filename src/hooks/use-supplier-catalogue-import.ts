@@ -30,7 +30,7 @@ export function useSupplierCatalogueImport() {
       const files = await parseCatalogueFile(file);
       const parsed = files.flatMap(item => item.rows);
       const identifiable = parsed.filter(row => row.orderCode.trim() && row.orderCode.length <= 255);
-      if (!parsed.length) throw new Error('This file contains no product rows. Choose a populated catalogue CSV or workbook.');
+      if (!parsed.length) throw new Error('This file contains no product rows. Choose a populated catalogue CSV.');
       const matches = new Map<string, DuplicateMatch[]>();
       for (let i = 0; i < identifiable.length; i += 100) {
         const result = await catalogueRequest<{ duplicates: { rowId: string; matches: DuplicateMatch[] }[] }>({

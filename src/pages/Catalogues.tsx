@@ -47,7 +47,7 @@ export default function Catalogues() {
               >
                 <span className="font-medium">Supplier catalogue</span>
                 <span className="text-xs text-muted-foreground">
-                  Save products, review duplicates, and choose files from public
+                  Upload a CSV, review duplicates, and choose files from public
                   Dropbox links. A product image is required.
                 </span>
               </DropdownMenuItem>}
