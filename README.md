@@ -33,6 +33,8 @@ npm install
 npm run dev
 ```
 
+
+
 ### Environment Variables
 
 Create a `.env.local` file with your Supabase credentials:
