@@ -1,212 +1,41 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  FileDropZone,
-  ImportPreview,
-  SheetSelector,
-  ImportProgress,
-  ImportSummary,
-} from '@/components/led-import';
-import { useLedCatalogueImport } from '@/hooks/use-led-catalogue-import';
-import { useAuth } from '@/hooks/useAuth';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Upload,
-  Eye,
-  Loader2,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-type Step = 'upload' | 'preview' | 'import';
-
-const STEPS: { key: Step; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { key: 'upload', label: 'Upload', icon: Upload },
-  { key: 'preview', label: 'Preview', icon: Eye },
-  { key: 'import', label: 'Import', icon: Loader2 },
-];
+import { Input } from '@/components/ui/input';
+import { useCompanies } from '@/hooks/use-companies';
+import { useCatalogueImport } from '@/hooks/use-catalogue-import';
+import { CatalogueImportReview } from '@/components/led-import/CatalogueImportReview';
 
 export default function LEDCatalogueImport() {
-  const { user } = useAuth();
-  const [step, setStep] = useState<Step>('upload');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  const {
-    phase,
-    parsedSheets,
-    sheetSelection,
-    progress,
-    result,
-    parseFile,
-    toggleSheet,
-    selectAllSheets,
-    deselectAllSheets,
-    startImport,
-    pauseImport,
-    resumeImport,
-    cancelImport,
-    reset,
-  } = useLedCatalogueImport();
-
-  const handleFileSelect = useCallback(
-    async (file: File) => {
-      setSelectedFile(file);
-      const success = await parseFile(file);
-      if (success) {
-        setStep('preview');
-      }
-    },
-    [parseFile]
-  );
-
-  const handleClearFile = useCallback(() => {
-    setSelectedFile(null);
-    reset();
-    setStep('upload');
-  }, [reset]);
-
-  const handleStartImport = useCallback(async () => {
-    setStep('import');
-    await startImport();
-  }, [startImport]);
-
-  const handleReset = useCallback(() => {
-    setSelectedFile(null);
-    reset();
-    setStep('upload');
-  }, [reset]);
-
-  const canProceedToImport =
-    Object.values(sheetSelection).some(Boolean) && phase === 'previewing';
-
-  const currentStepIndex = STEPS.findIndex(s => s.key === step);
-
-  return (
-    <DashboardLayout title="Catalogues / Import LED Catalogue" showSearch={false}>
-      <div className="max-w-4xl mx-auto space-y-8">
-        {/* Step Indicator */}
-        <div className="flex items-center justify-center">
-          {STEPS.map((s, index) => {
-            const Icon = s.icon;
-            const isActive = s.key === step;
-            const isCompleted = index < currentStepIndex;
-            const isPast =
-              (step === 'import' && s.key === 'upload') ||
-              (step === 'import' && s.key === 'preview');
-
-            return (
-              <div key={s.key} className="flex items-center">
-                <div
-                  className={cn(
-                    'flex items-center gap-2 px-4 py-2 rounded-lg transition-colors',
-                    isActive
-                      ? 'bg-[#5B6FAF] text-white'
-                      : isCompleted || isPast
-                        ? 'bg-[#7BA23F] text-white'
-                        : 'bg-muted text-muted-foreground'
-                  )}
-                >
-                  <Icon
-                    className={cn(
-                      'h-4 w-4',
-                      isActive &&
-                        s.key === 'import' &&
-                        phase === 'importing' &&
-                        'animate-spin'
-                    )}
-                  />
-                  <span className="font-medium">{s.label}</span>
-                </div>
-                {index < STEPS.length - 1 && (
-                  <div
-                    className={cn(
-                      'w-12 h-0.5 mx-2',
-                      index < currentStepIndex ? 'bg-[#7BA23F]' : 'bg-border'
-                    )}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Step Content */}
-        {step === 'upload' && (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center mb-6">
-                <h2 className="text-lg font-semibold mb-2">
-                  Upload LED Catalogue File
-                </h2>
-                <p className="text-muted-foreground">
-                  Drop your XLSM file containing LED product data. The system
-                  will extract product images and specifications and organize
-                  them into a folder structure.
-                </p>
-              </div>
-              <FileDropZone
-                onFileSelect={handleFileSelect}
-                isLoading={phase === 'parsing'}
-                selectedFile={selectedFile}
-                onClear={handleClearFile}
-              />
-              {phase === 'parsing' && (
-                <div className="flex items-center justify-center gap-2 mt-4 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Parsing file...
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {step === 'preview' && user && (
-          <div className="space-y-6">
-            <ImportPreview sheets={parsedSheets} userId={user.id} />
-            <SheetSelector
-              sheets={parsedSheets}
-              selection={sheetSelection}
-              onToggle={toggleSheet}
-              onSelectAll={selectAllSheets}
-              onDeselectAll={deselectAllSheets}
-            />
-            <div className="flex items-center justify-between">
-              <Button variant="outline" onClick={handleClearFile}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-              <Button
-                onClick={handleStartImport}
-                disabled={!canProceedToImport}
-                className="bg-[#7BA23F] hover:bg-[#6B9235] text-white"
-              >
-                Start Import
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {step === 'import' && (
-          <>
-            {phase === 'completed' && result ? (
-              <ImportSummary result={result} onReset={handleReset} />
-            ) : (
-              <ImportProgress
-                progress={progress}
-                onPause={pauseImport}
-                onResume={resumeImport}
-                onCancel={() => {
-                  cancelImport();
-                  handleReset();
-                }}
-              />
-            )}
-          </>
-        )}
-      </div>
-    </DashboardLayout>
-  );
+  const importer = useCatalogueImport();
+  const [supplier, setSupplier] = useState<{ id: number; name: string }>();
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const { data: companies, isLoading, error } = useCompanies({ type: 'SU', search, page, pageSize: 25 });
+  return <DashboardLayout title="Catalogues / Import Catalogue" showSearch={false}>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <p className="text-muted-foreground">Choose the supplier company for this file, review its products and linked files, then import. Use public Dropbox file or folder links with downloads enabled. Links must open without a Dropbox login or password.</p>
+      {importer.error && <p role="alert" className="rounded border border-destructive p-4 text-sm text-destructive">{importer.error}</p>}
+      {!importer.rows.length ? <Card>
+        <CardHeader><CardTitle className="text-lg">1. Choose supplier company</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <label htmlFor="supplier-search" className="block text-sm font-medium">Find supplier</label>
+          <Input id="supplier-search" placeholder="Search supplier companies" value={search} disabled={Boolean(importer.busy)} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+          {error && <p role="alert" className="text-destructive text-sm">Could not load supplier companies. {error.message}</p>}
+          {isLoading && <p role="status" className="text-sm">Loading supplier companies…</p>}
+          <label htmlFor="supplier-company" className="block text-sm font-medium">Supplier company</label>
+          <select id="supplier-company" className="w-full rounded border bg-background p-3 text-sm" value={supplier?.id ?? ''} disabled={Boolean(importer.busy) || isLoading} onChange={e => {
+            const company = companies?.rows.find(item => item.id === Number(e.target.value));
+            setSupplier(company ? { id: company.id, name: company.name } : undefined);
+          }}><option value="">Select a supplier…</option>{supplier && !companies?.rows.some(item => item.id === supplier.id) && <option value={supplier.id}>{supplier.name}</option>}{companies?.rows.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select>
+          <div className="flex items-center gap-3"><Button variant="outline" size="sm" disabled={Boolean(importer.busy) || page <= 1} onClick={() => setPage(page - 1)}>Previous suppliers</Button><span className="text-xs">Page {page}</span><Button variant="outline" size="sm" disabled={Boolean(importer.busy) || !companies || page * 25 >= companies.total_count} onClick={() => setPage(page + 1)}>More suppliers</Button></div>
+          {!isLoading && companies?.total_count === 0 && <p className="text-sm">No suppliers found. Create a supplier company before importing its catalogue.</p>}
+          <div className="border-t pt-5 space-y-3"><h2 className="font-semibold">2. Choose catalogue file</h2><p className="text-sm text-muted-foreground">One supplier per file. CSV, XLSX, XLSM, and XLS are supported. Files are parsed locally before any products or attachments are saved.</p><input aria-label="Catalogue file" type="file" accept=".csv,.xlsx,.xlsm,.xls" disabled={!supplier || Boolean(importer.busy)} onChange={e => {
+            const file = e.target.files?.[0]; if (file && supplier) void importer.parse(file, supplier.id); e.target.value = '';
+          }} className="block max-w-full text-sm" />{importer.busy === 'parsing' && <p role="status" className="text-sm">Parsing catalogue and checking existing products…</p>}</div>
+        </CardContent>
+      </Card> : <><p className="text-sm font-medium">Supplier: {supplier?.name} · Review before saving</p><CatalogueImportReview importer={importer} /></>}
+    </div>
+  </DashboardLayout>;
 }

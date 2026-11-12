@@ -587,6 +587,10 @@ export interface ProductDetails {
   supplier?: string;
   productType?: string;
   type?: string;
+  lampCategory?: string;
+  baseCategory?: string;
+  baseType?: string;
+  color?: string;
   manufacturer?: string;
   orderCode?: string;
   length?: string;
@@ -630,7 +634,10 @@ export interface ProductDetails {
   productSpecifications?: string;
   installationInstructions?: string;
   productImage?: string;
+  iesFile?: string;
   compatibleOrderCodes?: string;
+  compatibleBallastCodes?: string;
+  lampsPowered?: string;
   notes?: string;
 }
 

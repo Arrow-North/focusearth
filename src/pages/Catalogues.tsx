@@ -5,14 +5,13 @@ import { Button } from "@/components/ui/button";
 import { CATALOGUE_CATEGORIES } from "@/lib/catalogues";
 import { useCategoryCounts } from "@/hooks/use-products";
 import { useAuth } from "@/hooks/useAuth";
-import { isAdmin } from "@/lib/roles";
 import { formatDate } from "@/lib/formatters";
 
 export default function Catalogues() {
   const navigate = useNavigate();
   const { userType } = useAuth();
   const { data: categoryCounts } = useCategoryCounts();
-  const isAdminUser = isAdmin(userType);
+  const isAdminUser = userType === 'SUPERADMIN';
 
   const now = new Date();
   const updatedAtStr = formatDate(now.toISOString()) || now.toLocaleString();
