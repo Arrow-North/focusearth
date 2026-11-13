@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, Columns3, Eye, Loader2, Settings2, Upload } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import {
   ResultPanel,
 } from '@/components/catalogue-import';
 import { useCatalogueImport } from '@/hooks/use-catalogue-import';
+import { RepositorySelectionPanel } from '@/components/catalogue-import/RepositorySelectionPanel';
 import { MAX_INPUT_FILE_SIZE } from '@/lib/catalogue-import/constants';
 import { cn } from '@/lib/utils';
 
@@ -28,6 +29,16 @@ const STEPS: { key: Step; label: string; icon: React.ComponentType<{ className?:
 export default function CatalogueImport() {
   const [step, setStep] = useState<Step>('configure');
   const imp = useCatalogueImport();
+  const { phase, discoveringRepositories, repositoryLinks, repositoryReviews, discoverRepositories } = imp;
+
+  useEffect(() => {
+    if (step === 'process' && phase === 'previewing') setStep('preview');
+  }, [step, phase]);
+  useEffect(() => {
+    if (step === 'preview' && !discoveringRepositories && repositoryLinks.some(link => !repositoryReviews[link.key]?.discovered)) {
+      void discoverRepositories(undefined, true);
+    }
+  }, [step, discoveringRepositories, repositoryLinks, repositoryReviews, discoverRepositories]);
 
   const currentStepIndex = STEPS.findIndex((s) => s.key === step);
   // Only a terminal phase may show results. Without this, the tick between
@@ -190,12 +201,14 @@ export default function CatalogueImport() {
               estimatedFetches={imp.estimates.fetches}
               estimatedRepos={imp.estimates.repos}
             />
+            <RepositorySelectionPanel importer={imp} />
             <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setStep('map')}>
+              <Button variant="outline" disabled={imp.discoveringRepositories} onClick={() => setStep('map')}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back
               </Button>
               <Button
+                disabled={imp.discoveringRepositories || imp.repositoryChoicesNeeded > 0}
                 onClick={() => {
                   setStep('process');
                   void imp.startImport();

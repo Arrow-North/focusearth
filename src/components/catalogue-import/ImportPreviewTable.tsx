@@ -139,9 +139,9 @@ export function ImportPreviewTable({
             tone="text-[#7BA23F]"
           />
           <StatTile
-            label="Recorded as IMAGE_REPO"
+            label="Collection fields to review"
             value={(estimatedRepos ?? 0).toLocaleString()}
-            hint="Galleries and folders; never downloaded"
+            hint="Choose one file or None for each hyperlink"
             icon={FolderOpen}
             tone="text-[#F5A623]"
           />

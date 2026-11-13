@@ -34,7 +34,7 @@ export const ASSET_FIELDS: AssetField[] = [
 /**
  * IMAGE      - a specific image; fetch and mirror to Storage
  * FILE       - a specific non-image file (usually a PDF spec sheet); also mirrored
- * IMAGE_REPO - a folder / gallery / archive of many images; recorded, never fetched
+ * IMAGE_REPO - a folder / gallery requiring a per-hyperlink file choice or explicit None
  * UNKNOWN    - could not be decided; recorded as a failure, never silently dropped
  */
 export type LinkClass = 'IMAGE' | 'FILE' | 'IMAGE_REPO' | 'UNKNOWN';

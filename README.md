@@ -138,7 +138,7 @@ Verified on 2026-11-12 with Node 22.23.0, Vite 5.4.19, and Wrangler 4.161.0: pro
 
 ## Supplier Catalogue Imports
 
-Super admins can import supplier CSV catalogues, review duplicates, choose files from Dropbox collections, and upload a required product image manually when necessary. See [catalogue import setup and verification](docs/catalogue-import.md) for deployment, credentials, supported formats, and limits.
+Super admins can import supplier CSV catalogues, review duplicates, and choose files from public Dropbox collections for each hyperlink. They can upload a product image manually or explicitly choose to import without one. The **Resolve assets to CSV** utility also supports collection choices and **None of these**. See [catalogue import setup and verification](docs/catalogue-import.md) for deployment, credentials, supported formats, and limits.
 
 ## License
 

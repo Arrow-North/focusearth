@@ -1,36 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { catalogueRequest } from '@/lib/led-import/catalogue-api';
-import { rowBlockers, type AssetCandidate, type RowReview } from '@/lib/led-import/import-review';
+import { ImportAssetCandidate } from '@/components/shared/ImportAssetCandidate';
+import { rowBlockers, type RowReview } from '@/lib/led-import/import-review';
 import type { useSupplierCatalogueImport } from '@/hooks/use-supplier-catalogue-import';
 
 type Importer = ReturnType<typeof useSupplierCatalogueImport>;
-function Candidate({ candidate, selected, disabled, onSelect }: { candidate: AssetCandidate; selected: boolean; disabled: boolean; onSelect: () => void }) {
-  const container = useRef<HTMLButtonElement>(null);
-  const [preview, setPreview] = useState(candidate.previewUrl);
-  const [previewError, setPreviewError] = useState(false);
-  useEffect(() => {
-    if (preview || !candidate.mimeType.startsWith('image/')) return;
-    let cancelled = false;
-    const observer = new IntersectionObserver(entries => {
-      if (!entries.some(entry => entry.isIntersecting)) return;
-      observer.disconnect();
-      catalogueRequest<{ previewUrl: string }>({ action: 'thumbnail', candidateId: candidate.id })
-        .then(result => { if (!cancelled) setPreview(result.previewUrl); })
-        .catch(() => { if (!cancelled) setPreviewError(true); });
-    });
-    if (container.current) observer.observe(container.current);
-    return () => { cancelled = true; observer.disconnect(); };
-  }, [candidate.id, candidate.mimeType, preview]);
-  return <button ref={container} type="button" disabled={disabled} onClick={onSelect} aria-pressed={selected}
-    className={`rounded-md border p-3 text-left break-words ${selected ? 'border-primary ring-2 ring-primary' : 'border-border'} disabled:opacity-60`}>
-    {candidate.mimeType.startsWith('image/') && (preview ? <img src={preview} alt={candidate.name} className="h-28 w-full object-contain mb-2" /> : <div className="h-28 flex items-center justify-center bg-muted text-xs mb-2">{previewError ? 'Preview unavailable' : 'Loading preview…'}</div>)}
-    <span className="block text-sm font-medium">{candidate.name}</span>
-    <span className="text-xs text-muted-foreground">{(candidate.size / 1024).toFixed(0)} KB · {selected ? 'Selected' : 'Choose file'}</span>
-  </button>;
-}
-
 export function CatalogueImportReview({ importer }: { importer: Importer }) {
   const { rows, busy } = importer;
   const [filter, setFilter] = useState('all');
@@ -45,7 +20,7 @@ export function CatalogueImportReview({ importer }: { importer: Importer }) {
     <Card><CardContent className="pt-6 space-y-4">
       <p className="font-medium">{importer.fileName}</p>
       <p className="text-sm">{rows.length} products · {blocked.length} need attention · {pending.length - blocked.length} ready · {completed.length} finished</p>
-      <p className="text-sm text-muted-foreground">Every linked field needs a selected file. Folder links list all eligible files, including files in nested folders. Product images are required. Skip any rows you do not want to import.</p>
+      <p className="text-sm text-muted-foreground">For each hyperlink, choose a file or explicitly choose None of these. Folder links list all eligible files, including files in nested folders. You may import without a product image after explicitly choosing none. Skip any rows you do not want to import.</p>
       <div className="flex flex-wrap gap-3">
         <Button variant="outline" disabled={Boolean(busy) || !pending.length} onClick={() => importer.discover()}>Discover linked files</Button>
         <Button disabled={Boolean(busy) || blocked.length > 0 || !rows.some(row => !row.outcome)} onClick={importer.commit}>Import reviewed products</Button>
@@ -81,20 +56,24 @@ function Row({ item, importer }: { item: RowReview; importer: Importer }) {
       {item.error && <p role="alert" className="text-sm text-destructive">Import failed: {item.error} Retry after resolving the issue. If the catalogue changed, start a new preview.</p>}
       {item.decision !== 'skip' && !item.outcome && <>
         {issues.length > 0 && <ul className="list-disc pl-5 text-sm text-amber-800 space-y-1">{issues.map(issue => <li key={issue}>{issue}</li>)}</ul>}
-        {!item.manualImage && !row.links.some(link => link.kind === 'image') && <p className="text-sm text-destructive">{row.imageIssue || 'Product image is not available for import.'}</p>}
+        {!item.manualImage && !item.imageOmitted && !row.links.some(link => link.kind === 'image') && <p className="text-sm text-destructive">{row.imageIssue || 'Product image is not available for import.'}</p>}
+        {!row.links.some(link => link.kind === 'image') && !item.manualImage && <Button size="sm" variant="outline" disabled={disabled} aria-pressed={Boolean(item.imageOmitted)} onClick={() => importer.omitImage(row.id)}>Continue without a product image</Button>}
+        {item.imageOmitted && <p role="status" className="text-sm text-muted-foreground">No product image will be imported. You can select or upload an image to change this choice.</p>}
         <Button size="sm" variant="outline" disabled={disabled || !row.links.length} onClick={() => importer.discover(row.id)}>Discover / refresh this row’s linked files</Button>
         {row.links.map(link => {
           const state = item.links[link.id];
           const overridden = link.kind === 'image' && item.manualImage;
+          const declined = Boolean(state?.declined || (link.kind === 'image' && item.imageOmitted));
           return <details key={link.id} className="border rounded-md p-3" open={Boolean(state?.discovered && !overridden)}>
-            <summary className="cursor-pointer text-sm font-medium">{link.header} — {overridden ? 'Manual image selected' : state?.selectedId ? `Selected: ${state.candidates.find(candidate => candidate.id === state.selectedId)?.name}` : state?.discovered ? `${state.candidates.length} eligible files; selection required` : 'Not discovered'}</summary>
+            <summary className="cursor-pointer text-sm font-medium">{link.header} — {overridden ? 'Manual image selected' : declined ? 'None selected — field will be empty' : state?.selectedId ? `Selected: ${state.candidates.find(candidate => candidate.id === state.selectedId)?.name}` : state?.discovered ? `${state.candidates.length} eligible files; choice required` : 'Not discovered'}</summary>
             <p className="text-xs break-all mt-2 text-muted-foreground">{link.url}</p>
-            {state?.error && !overridden && <p role="alert" className="text-sm text-destructive mt-2">Not available for import: {state.error}</p>}
-            {!overridden && state?.candidates.length > 1 && <p className="text-sm mt-2">This link contains multiple files. Choose one for this field.</p>}
-            {!overridden && <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">{state?.candidates.map(candidate => <Candidate key={candidate.id} candidate={candidate} selected={state.selectedId === candidate.id} disabled={disabled} onSelect={() => importer.selectCandidate(row.id, link.id, candidate.id)} />)}</div>}
+            {state?.error && !overridden && !declined && <p role="alert" className="text-sm text-destructive mt-2">Not available for import: {state.error}</p>}
+            {!overridden && state?.sourceType === 'folder' && <p className="text-sm mt-2">Choose one file from this collection for this hyperlink, or choose None of these.</p>}
+            {!overridden && state?.discovered && <Button className="mt-3" size="sm" variant="outline" disabled={disabled} aria-label={`None of these for ${link.header}`} aria-pressed={declined} onClick={() => importer.declineCandidate(row.id, link.id)}>None of these</Button>}
+            {!overridden && <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">{state?.candidates.map(candidate => <ImportAssetCandidate key={candidate.id} candidate={candidate} selected={state.selectedId === candidate.id} disabled={disabled} onSelect={() => importer.selectCandidate(row.id, link.id, candidate.id)} />)}</div>}
           </details>;
         })}
-        <div className="space-y-2"><label htmlFor={`image-${row.id}`} className="block text-sm font-medium">Upload a product image manually {item.manualImage ? `— ${item.manualImage.name}` : '(required if the linked image is unavailable)'}</label><input id={`image-${row.id}`} type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={disabled} onChange={e => { importer.manualImage(row.id, e.target.files?.[0]); e.target.value = ''; }} className="block max-w-full text-sm" /><p className="text-xs text-muted-foreground">JPEG, PNG, WebP, or GIF. Maximum 10 MB.</p>{item.manualImage && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => importer.manualImage(row.id)}>Remove manual image</Button>}</div>
+        <div className="space-y-2"><label htmlFor={`image-${row.id}`} className="block text-sm font-medium">Upload a product image manually {item.manualImage ? `— ${item.manualImage.name}` : '(optional)'}</label><input id={`image-${row.id}`} type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={disabled} onChange={e => { importer.manualImage(row.id, e.target.files?.[0]); e.target.value = ''; }} className="block max-w-full text-sm" /><p className="text-xs text-muted-foreground">JPEG, PNG, WebP, or GIF. Maximum 10 MB.</p>{item.manualImage && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => importer.manualImage(row.id)}>Remove manual image</Button>}</div>
       </>}
       <details><summary className="cursor-pointer text-sm">Review all parsed fields</summary><dl className="grid md:grid-cols-2 gap-3 mt-3">{Object.entries(row.sourceValues).map(([key, value]) => <div key={key} className="text-sm min-w-0"><dt className="font-medium">{key}</dt><dd className="break-words text-muted-foreground whitespace-pre-wrap">{value || '—'}</dd></div>)}</dl></details>
     </CardContent>

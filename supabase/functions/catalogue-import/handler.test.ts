@@ -35,14 +35,14 @@ async function harness() {
       const query = {
         select:()=>query,eq:()=>query,or:()=>query,is:()=>query,order:()=>query,
         single:async()=>({data:{id:1,name:'Supplier Company'},error:null}),
-        maybeSingle:async()=>({data:table==='profiles'?state.profile:table==='company'?(state.supplier?{id:1}:null):state.prior,error:null}),
+        maybeSingle:async()=>({data:table==='profiles'?state.profile:table==='company'?(state.supplier?{id:1,name:'Supplier Company'}:null):state.prior,error:null}),
         range:async()=>({data:state.products,error:null}),
       };
       return query;
     },
-    storage:{from:()=>({
+    storage:{from:(bucket:string)=>({
       upload:async(path:string)=>{state.uploads.push(path);return {error:null};},
-      getPublicUrl:(path:string)=>({data:{publicUrl:`https://example.supabase.co/storage/v1/object/public/catalogue-assets/${path}`}}),
+      getPublicUrl:(path:string)=>({data:{publicUrl:`https://example.supabase.co/storage/v1/object/public/${bucket}/${path}`}}),
       remove:async(paths:string[])=>{state.removed.push(...paths);return {error:null};},
     })},
     rpc:async(_name:string,params:Record<string,unknown>)=>{
@@ -143,6 +143,64 @@ test('handler requires a product image and rejects a PDF chosen as image',async(
   const token=await candidate('spec.pdf','application/pdf');
   const result=await request(payload({attachments:[{field:'productImage',candidateId:token}],sourceLinks:[{detailKey:'productImage',url:shared}]}));
   assert.equal(result.status,400);assert.match(result.body.error,/valid product image/);assert.equal(state.committed.length,0);
+});
+test('explicit None can decline image and documents independently without downloads and records trusted audit data',async()=>{
+  const {request,state}=await harness();
+  const sourceLinks=[{detailKey:'productImage',url:shared},{detailKey:'productSpecifications',url:shared}];
+  const result=await request(payload({sourceLinks,omittedFields:['productImage','productSpecifications'],details:{productImage:shared,image:'old-image',productImageHyperlink:'old-image',productSpecifications:shared,productSpecificationsHyperlink:'old-document',omittedAssets:{spoofed:'caller'}}}));
+  assert.equal(result.status,200);assert.equal(result.body.status,'created');
+  assert.deepEqual(state.fetches,[]);assert.deepEqual(state.uploads,[]);
+  const details=state.committed[0].p_details as Record<string,unknown>;
+  assert.equal(details.productImage,'');assert.equal(details.image,'');assert.equal(details.productImageHyperlink,'');assert.equal(details.productSpecifications,'');assert.equal(details.productSpecificationsHyperlink,'');
+  assert.deepEqual(details.importedAssets,{});
+  assert.deepEqual(details.omittedAssets,{productImage:{reason:'admin_declined',sourceUrl:shared},productSpecifications:{reason:'admin_declined',sourceUrl:shared}});
+});
+test('None requires explicit field choices and rejects ambiguous, forged or unrelated omissions',async()=>{
+  const {request,state}=await harness();
+  assert.equal((await request(payload({details:{productImage:'',omittedAssets:{productImage:{reason:'admin_declined'}}}}))).status,400);
+  assert.equal((await request(payload({omittedFields:['productImage','productImage']}))).status,400);
+  assert.equal((await request(payload({omittedFields:['productImage','unrelatedField']}))).status,400);
+  assert.equal((await request(payload({omittedFields:['productImage'],manualImage:manual}))).status,400);
+  assert.equal((await request(payload({omittedFields:['productImage'],attachments:[{field:'productImage',candidateId:await candidate()}]}))).status,400);
+  assert.equal((await request(payload({omittedFields:['productImage'],sourceLinks:[{detailKey:'productSpecifications',url:shared}]}))).status,400);
+  assert.equal((await request(payload({manualImage:manual,sourceLinks:[{detailKey:'omittedAssets',url:shared}],attachments:[{field:'omittedAssets',candidateId:await candidate()}]}))).status,400);
+  assert.deepEqual(state.uploads,[]);assert.deepEqual(state.committed,[]);
+});
+test('missing image can be explicitly declined while an independently chosen document is saved',async()=>{
+  const {request,state}=await harness();
+  const result=await request(payload({omittedFields:['productImage'],sourceLinks:[{detailKey:'productSpecifications',url:shared}],attachments:[{field:'productSpecifications',candidateId:await candidate()}]}));
+  assert.equal(result.status,200);assert.equal(state.uploads.length,1);
+  const details=state.committed[0].p_details as Record<string,unknown>;
+  assert.equal(details.productImage,'');assert.ok(String(details.productSpecifications).includes('catalogue-assets/'));
+});
+test('asset CSV selections are stored with safe company and field-specific content-addressed paths',async()=>{
+  const {request,state}=await harness();const token=await candidate();
+  const body={action:'store-asset',companyId:1,luminaireType:'fixtures',productId:importId,candidateId:token,url:shared};
+  const image=await request({...body,field:'productImage'});
+  const spec=await request({...body,field:'specifications'});
+  const retry=await request({...body,field:'productImage'});
+  assert.equal(image.status,200);assert.equal(spec.status,200);assert.equal(retry.status,200);
+  assert.match(image.body.publicUrl,/\/public\/leds\/supplier-company\/fixtures\//);
+  assert.equal(image.body.bucket,'leds');assert.equal(image.body.objectKey,retry.body.objectKey);
+  assert.notEqual(image.body.objectKey,spec.body.objectKey);
+  assert.match(spec.body.objectKey,/-spec-[0-9a-f]{24}\.png$/);
+  assert.equal(state.committed.length,0);
+});
+test('asset CSV selections reject unsupported types, invalid destinations and private or stale files',async()=>{
+  const {request,state}=await harness();
+  const base={action:'store-asset',companyId:1,luminaireType:'fixtures',productId:importId,field:'productImage',candidateId:await candidate(),url:shared};
+  assert.equal((await request({...base,url:'https://www.dropbox.com/sh/different/token'})).status,400);
+  assert.equal((await request({...base,url:undefined})).status,400);
+  assert.equal((await request({...base,luminaireType:'../../outside'})).status,400);
+  assert.equal((await request({...base,productId:'not-a-uuid'})).status,400);
+  assert.equal((await request({...base,field:'unexpected'})).status,400);
+  assert.equal((await request({...base,candidateId:await candidate('spec.pdf','application/pdf')})).status,400);
+  assert.equal((await request({...base,field:'specifications',candidateId:await candidate('spec.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document')})).status,400);
+  state.restrictedChild=true;
+  assert.equal((await request(base)).status,422);
+  state.restrictedChild=false;state.downloadSize=png.length+1;
+  assert.equal((await request(base)).status,400);
+  assert.equal(state.uploads.length,0);
 });
 test('each hyperlink column needs its own file selection even when columns share the same folder',async()=>{
   const {request,state}=await harness();const token=await candidate();

@@ -32,6 +32,7 @@ async function database() {
     INSERT INTO company VALUES (1,'SU',false),(2,'SU',false),(3,'REU',false),(4,'SU',true);
   `);
   await db.exec(await readFile(new URL('../supabase/migrations/20261112000000_catalogue_import.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261112010000_catalogue_import_explicit_none.sql', import.meta.url), 'utf8'));
   return db;
 }
 async function commit(db, overrides = {}) {
@@ -56,10 +57,21 @@ test('catalogue migration executes and enforces authorization, images, duplicate
       await assert.rejects(commit(db, { company: 3 }), /Supplier company/);
       await assert.rejects(commit(db, { company: 4 }), /Supplier company/);
     });
-    await t.test('mandatory image must have a matching saved asset manifest', async () => {
+    await t.test('an image must have a matching saved asset manifest unless explicitly declined', async () => {
       await assert.rejects(commit(db, { details: {} }), /saved product image/);
       await assert.rejects(commit(db, { details: { productImage: image, importedAssets: {} } }), /saved product image/);
       await assert.rejects(commit(db, { details: { productImage: image, importedAssets: {productImage:{url:'wrong'}} } }), /saved product image/);
+    });
+    await t.test('explicit None creates an image-free product and remains idempotent', async () => {
+      const declined = {productImage:'',image:'',productImageHyperlink:'',importedAssets:{},omittedAssets:{productImage:{reason:'admin_declined',sourceUrl:'https://www.dropbox.com/sh/folder/token'}}};
+      const result = await commit(db,{rowId:'Lamps:none',code:'NONE',details:declined});
+      assert.equal(result.status,'created');
+      const product = (await db.query('SELECT details FROM product WHERE id=$1',[result.productId])).rows[0].details;
+      assert.equal(product.productImage,''); assert.equal(product.omittedAssets.productImage.reason,'admin_declined');
+      assert.equal((await commit(db,{rowId:'Lamps:none',code:'NONE',details:declined})).replayed,true);
+      await assert.rejects(commit(db,{rowId:'Lamps:bad-none',code:'BAD-NONE',details:{...declined,productImage:image}}), /must not retain an image/);
+      await assert.rejects(commit(db,{rowId:'Lamps:bad-none',code:'BAD-NONE',details:{...declined,image}}), /must not retain an image/);
+      await assert.rejects(commit(db,{rowId:'Lamps:bad-none',code:'BAD-NONE',details:{...declined,importedAssets:{productImage:{url:image}}}}), /must not retain an image/);
     });
     let created;
     await t.test('create writes catalogue and retry returns same product without another insert', async () => {
@@ -67,7 +79,7 @@ test('catalogue migration executes and enforces authorization, images, duplicate
       assert.equal(created.status, 'created');
       const replay = await commit(db, { details: { ...details, description: 'Retry changed text' } });
       assert.equal(replay.productId, created.productId); assert.equal(replay.replayed, true);
-      assert.equal((await db.query('SELECT count(*)::int AS count FROM product')).rows[0].count, 1);
+      assert.equal((await db.query("SELECT count(*)::int AS count FROM product WHERE details->>'orderCode'='ABC'")).rows[0].count, 1);
       const product = (await db.query('SELECT * FROM product WHERE id=$1', [created.productId])).rows[0];
       assert.equal(product.details.description, 'Imported lamp');
       assert.deepEqual(product.details.sourceValues, { 'Order Code': 'ABC' });
@@ -88,6 +100,15 @@ test('catalogue migration executes and enforces authorization, images, duplicate
     await t.test('same order code in another supplier or category is independent', async () => {
       assert.equal((await commit(db,{company:2,rowId:'Lamps:7'})).status,'created');
       assert.equal((await commit(db,{category:'fixtures',rowId:'Fixtures:4'})).status,'created');
+    });
+    await t.test('explicit None update clears a prior image and its aliases', async () => {
+      await db.query("UPDATE product SET details=details||jsonb_build_object('image',$2::text,'productImageHyperlink',$2::text) WHERE id=$1",[created.productId,image]);
+      const product = (await db.query('SELECT * FROM product WHERE id=$1',[created.productId])).rows[0];
+      const declined = {productImage:'',importedAssets:{},omittedAssets:{productImage:{reason:'admin_declined',sourceUrl:null}}};
+      assert.equal((await commit(db,{rowId:'Lamps:clear-image',decision:'update',existingId:created.productId,updatedAt:product.updated_at,details:declined})).status,'updated');
+      const saved = (await db.query('SELECT details FROM product WHERE id=$1',[created.productId])).rows[0].details;
+      assert.equal(saved.productImage,'');assert.equal(saved.image,'');assert.equal(saved.productImageHyperlink,'');
+      assert.deepEqual(saved.importedAssets,{});
     });
     await t.test('import audit rows use RLS and no authenticated table privileges', async () => {
       const result = await db.query("SELECT relrowsecurity FROM pg_class WHERE oid='public.catalogue_import_rows'::regclass");

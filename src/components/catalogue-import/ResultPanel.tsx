@@ -135,7 +135,7 @@ export function ResultPanel({
           tone="text-[#7BA23F]"
         />
         <Stat
-          label="Image repos"
+          label="Collection fields reviewed"
           value={progress?.imageRepos ?? 0}
           tone="text-[#F5A623]"
         />

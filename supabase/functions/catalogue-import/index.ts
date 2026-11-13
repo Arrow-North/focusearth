@@ -85,6 +85,7 @@ async function discover(body: Record<string,unknown>, userId: string) {
   const candidates = [];
   for (const {entry,path} of entries) {
     if (!eligible(entry.name,Number(entry.size),kind) || entry.is_downloadable === false) continue;
+    if (body.legacy === true && !['image/jpeg','image/png','image/webp','image/gif','application/pdf'].includes(mimeForName(entry.name)!)) continue;
     const claim: CandidateClaim = {userId,url,path,name:entry.name,mimeType:mimeForName(entry.name)!,size:Number(entry.size),revision:entry.rev,expires:Date.now()+24*60*60*1000};
     candidates.push({id:await signCandidate(claim,secret),name:path ? path.slice(1) : entry.name,mimeType:claim.mimeType,size:claim.size});
   }
@@ -99,6 +100,43 @@ async function thumbnail(body: Record<string,unknown>, userId: string) {
   const bytes = await readBounded(response,1024*1024);
   validateBytes(bytes,'image/jpeg');
   return {previewUrl:`data:image/jpeg;base64,${encode64(bytes)}`};
+}
+
+async function downloadSelected(claim: CandidateClaim): Promise<Uint8Array> {
+  await publicMetadata(claim.url,claim.path);
+  const response = await dropbox('sharing/get_shared_link_file',{url:claim.url,...(claim.path?{path:claim.path}:{})},true);
+  const bytes = await readBounded(response,claim.mimeType.startsWith('image/')?IMAGE_LIMIT:DOCUMENT_LIMIT);
+  let metadata: {rev?:string;size?:number} = {};
+  try { metadata = JSON.parse(response.headers.get('Dropbox-API-Result') || '{}'); } catch { throw new ImportFailure('Dropbox returned invalid file metadata.'); }
+  if (bytes.length!==claim.size || (claim.revision && metadata.rev!==claim.revision)) throw new ImportFailure('Selected Dropbox file changed since preview. Discover and select it again.');
+  validateBytes(bytes,claim.mimeType);
+  return bytes;
+}
+
+/** Mirror an independently selected collection file for the asset-to-CSV utility. */
+async function storeAsset(body: Record<string,unknown>, userId: string) {
+  const companyId = integer(body.companyId,'company');
+  const type = text(body.luminaireType,'luminaire type');
+  if (!['fixtures','lamps','power-supplies','controls','accessories'].includes(type)) throw new ImportFailure('Invalid luminaire type.');
+  const field = text(body.field,'attachment field');
+  if (!['specifications','installationInstructions','productImage'].includes(field)) throw new ImportFailure('Invalid attachment field.');
+  const productId = text(body.productId,'product ID');
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(productId)) throw new ImportFailure('Invalid product ID.');
+  const {data:company,error} = await service.from('company').select('id,name').eq('id',companyId).or('is_deleted.is.null,is_deleted.eq.false').maybeSingle();
+  if (error || !company || typeof company.name !== 'string') throw new ImportFailure('Select an existing company before importing.');
+  const claim = await verifyCandidate(body.candidateId,userId,secret);
+  if (dropboxUrl(body.url)!==dropboxUrl(claim.url)) throw new ImportFailure('Selected file does not match this hyperlink. Discover and select its files again.');
+  if (!['image/jpeg','image/png','image/webp','image/gif','application/pdf'].includes(claim.mimeType) || (field==='productImage' && !claim.mimeType.startsWith('image/'))) throw new ImportFailure('Choose a supported image or PDF for this field.');
+  const bytes = await downloadSelected(claim);
+  const slug = company.name.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80) || 'unknown';
+  const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),byte=>byte.toString(16).padStart(2,'0')).join('').slice(0,24);
+  const extension = claim.name.split('.').pop()!.toLowerCase();
+  const suffix = field==='specifications'?'-spec':field==='installationInstructions'?'-install':'';
+  // Content-addressed names make retries stable and different choices immutable.
+  const objectKey = `${slug}/${type}/${productId}${suffix}-${digest}.${extension}`;
+  const uploaded = await service.storage.from('leds').upload(objectKey,bytes,{contentType:claim.mimeType,upsert:true,cacheControl:'3600'});
+  if (uploaded.error) throw new ImportFailure(`Could not save selected file: ${uploaded.error.message}`,500);
+  return {publicUrl:service.storage.from('leds').getPublicUrl(objectKey).data.publicUrl,objectKey,bucket:'leds'};
 }
 
 async function duplicates(body: Record<string,unknown>) {
@@ -130,7 +168,10 @@ async function commit(body: Record<string,unknown>, userId: string) {
   if (body.decision === 'skip') return {status:'skipped'};
   const {data:company,error:companyError} = await service.from('company').select('name').eq('id',companyId).single();
   if (companyError || !company) throw new ImportFailure('Supplier company is not available.');
-  const details = {...object(body.details),orderCode:code,supplier:company.name};
+  const details: Record<string,unknown> = {...object(body.details),orderCode:code,supplier:company.name};
+  // Audit markers and asset manifests are generated by this backend, never accepted from a caller.
+  delete details.omittedAssets;
+  delete details.importedAssets;
   if (JSON.stringify(details).length > 256*1024) throw new ImportFailure('Row details are too large.');
   // A retry after an interrupted response returns the prior result before downloading assets again.
   const {data:prior,error:priorError} = await service.from('catalogue_import_rows').select('result,company_id,category,order_code').eq('actor_id',userId).eq('import_id',importId).eq('row_id',rowId).maybeSingle();
@@ -141,10 +182,13 @@ async function commit(body: Record<string,unknown>, userId: string) {
   }
   if (!Array.isArray(body.attachments) || body.attachments.length > 50) throw new ImportFailure('Invalid linked file selections.');
   const selections = body.attachments.map(value => { const entry = object(value); return {field:text(entry.field,'attachment field',100),candidateId:entry.candidateId}; });
-  if (new Set(selections.map(entry=>entry.field)).size !== selections.length || selections.some(entry=>!/^\w[\w-]*$/.test(entry.field) || ['__proto__','constructor','prototype','sourceValues','importedAssets','orderCode'].includes(entry.field))) throw new ImportFailure('Invalid or duplicate attachment field.');
+  if (new Set(selections.map(entry=>entry.field)).size !== selections.length || selections.some(entry=>!/^\w[\w-]*$/.test(entry.field) || ['__proto__','constructor','prototype','sourceValues','importedAssets','omittedAssets','orderCode'].includes(entry.field))) throw new ImportFailure('Invalid or duplicate attachment field.');
+  if (body.omittedFields !== undefined && (!Array.isArray(body.omittedFields) || body.omittedFields.length > 50)) throw new ImportFailure('Invalid declined field choices.');
+  const omitted = (body.omittedFields as unknown[] | undefined ?? []).map(value=>text(value,'declined field',100));
+  if (new Set(omitted).size !== omitted.length || omitted.some(field=>!/^\w[\w-]*$/.test(field) || ['__proto__','constructor','prototype','sourceValues','importedAssets','omittedAssets','orderCode'].includes(field) || selections.some(selection=>selection.field===field))) throw new ImportFailure('A linked field must have exactly one selected file or an explicit None choice.');
   const manual = body.manualImage ? object(body.manualImage) : undefined;
-  if (!manual && !selections.some(entry=>entry.field==='productImage')) throw new ImportFailure('Product image is unavailable for import. Select an image or manually upload one.');
-  if (manual && selections.some(entry=>entry.field==='productImage')) throw new ImportFailure('Choose one product image source.');
+  if (!manual && !omitted.includes('productImage') && !selections.some(entry=>entry.field==='productImage')) throw new ImportFailure('Product image is unavailable for import. Select an image, upload one manually, or explicitly choose None.');
+  if (manual && (omitted.includes('productImage') || selections.some(entry=>entry.field==='productImage'))) throw new ImportFailure('Choose one product image source or None.');
   const claims = await Promise.all(selections.map(async selection=>({...selection,claim:await verifyCandidate(selection.candidateId,userId,secret)})));
   if (claims.some(entry=>entry.field==='productImage' && !entry.claim.mimeType.startsWith('image/'))) throw new ImportFailure('A valid product image is required.');
   // A folder used by two different columns still requires a separate choice for each field.
@@ -154,11 +198,23 @@ async function commit(body: Record<string,unknown>, userId: string) {
   if (new Set(sourceLinks.map(link=>link.detailKey)).size !== sourceLinks.length) throw new ImportFailure('Duplicate source link fields.');
   for (const link of sourceLinks) {
     const field = text(link.detailKey,'source link field',100);
+    if (omitted.includes(field)) continue;
     if (field==='productImage' && manual) continue;
     const chosen = claims.find(entry=>entry.field===field);
     if (!chosen || dropboxUrl(link.url)!==dropboxUrl(chosen.claim.url)) throw new ImportFailure(`Select a file for every linked field before importing (${field}).`);
   }
   if (claims.some(entry=>!sourceLinks.some(link=>link.detailKey===entry.field))) throw new ImportFailure('File selection does not match the source linked fields.');
+  if (omitted.some(field=>field!=='productImage' && !sourceLinks.some(link=>link.detailKey===field))) throw new ImportFailure('Declined choice does not match a source linked field.');
+  const omittedAssets: Record<string,unknown> = {};
+  const aliases: Record<string,string[]> = {productImage:['image','productImageHyperlink'],productSpecifications:['productSpecificationsHyperlink'],installationInstructions:['installationInstructionsHyperlink']};
+  for (const field of omitted) {
+    const original = sourceLinks.find(link=>link.detailKey===field)?.url;
+    if (typeof original === 'string' && original.length > 4096) throw new ImportFailure('Original linked URL is too long.');
+    details[field] = '';
+    omittedAssets[field] = {reason:'admin_declined',sourceUrl:typeof original==='string'?original:null};
+    for (const alias of aliases[field] || []) details[alias]='';
+  }
+  details.omittedAssets = omittedAssets;
   const paths: string[] = []; const assets: Record<string,unknown> = {};
   let preservePaths = false;
   const attemptId = crypto.randomUUID();
@@ -170,18 +226,14 @@ async function commit(body: Record<string,unknown>, userId: string) {
     if (error) throw new ImportFailure(`Could not save ${field}: ${error.message}`,500);
     paths.push(path);
     const url = service.storage.from('catalogue-assets').getPublicUrl(path).data.publicUrl;
-    (details as Record<string,unknown>)[field] = url; assets[field] = {url,path,name,sourceUrl};
+    details[field] = url; assets[field] = {url,path,name,sourceUrl};
+    for (const alias of aliases[field] || []) details[alias]=url;
   }
   try {
     for (const {field,claim} of claims) {
       // Recheck the selected child: a public folder can contain restricted files,
       // and the link's visibility may have changed after discovery.
-      await publicMetadata(claim.url,claim.path);
-      const response = await dropbox('sharing/get_shared_link_file',{url:claim.url,...(claim.path?{path:claim.path}:{})},true);
-      const bytes = await readBounded(response,claim.mimeType.startsWith('image/')?IMAGE_LIMIT:DOCUMENT_LIMIT);
-      let metadata: {rev?:string;size?:number} = {};
-      try { metadata = JSON.parse(response.headers.get('Dropbox-API-Result') || '{}'); } catch { throw new ImportFailure('Dropbox returned invalid file metadata.'); }
-      if (bytes.length!==claim.size || (claim.revision && metadata.rev!==claim.revision)) throw new ImportFailure('Selected Dropbox file changed since preview. Discover and select it again.');
+      const bytes = await downloadSelected(claim);
       await store(field,claim.name,claim.mimeType,bytes,claim.url);
     }
     if (manual) {
@@ -237,6 +289,7 @@ Deno.serve(async request => {
     const result = body.action==='discover' ? await discover(body,user.id)
       : body.action==='thumbnail' ? await thumbnail(body,user.id)
       : body.action==='duplicates' ? await duplicates(body)
+      : body.action==='store-asset' ? await storeAsset(body,user.id)
       : body.action==='commit' ? await commit(body,user.id)
       : (()=>{throw new ImportFailure('Unknown catalogue import action.');})();
     return reply(result);

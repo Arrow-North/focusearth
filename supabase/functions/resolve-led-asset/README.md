@@ -4,6 +4,13 @@ Mirrors manufacturer-catalogue asset links (product images, spec sheets,
 installation instructions) into the public `leds` Storage bucket and returns the
 resulting public URLs.
 
+When this endpoint returns `image_repo`, the **Resolve assets to CSV** UI now
+opens a per-hyperlink file chooser through the `catalogue-import` function.
+Super admins can choose a public Dropbox collection file or **None of these**.
+Chosen files use that function's `store-asset` action; None leaves the output
+field empty. Deploy and configure `catalogue-import` as described in the
+[catalogue import guide](../../../docs/catalogue-import.md) to enable this flow.
+
 Wire contract: `ResolveRequest` -> `ResolveResponse` from
 [`src/types/catalogue-import.ts`](../../../src/types/catalogue-import.ts).
 

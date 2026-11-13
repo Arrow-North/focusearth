@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { rowBlockers, validateManualImage, type RowReview } from './import-review';
+import { omittedFields, rowBlockers, validateManualImage, type RowReview } from './import-review';
 
 function review(): RowReview {
   return { row: { id: 'Fixtures:4', rowNumber: 4, category: 'fixtures', orderCode: 'ABC', details: {}, sourceValues: {}, links: [], errors: [], imageIssue: 'No image.' }, matches: [], decision: 'create', links: {} };
@@ -58,4 +58,56 @@ test('manual image rejects unsupported, empty and oversize files', () => {
   assert.match(validateManualImage({ type: 'image/svg+xml', size: 1024 })!, /JPEG/);
   assert.match(validateManualImage({ type: 'image/png', size: 0 })!, /nonempty/);
   assert.match(validateManualImage({ type: 'image/png', size: 10 * 1024 * 1024 + 1 })!, /10 MB/);
+});
+
+test('a product without an image requires an explicit omission decision', () => {
+  const row = review();
+  assert.match(rowBlockers(row, [row]).join(' '), /explicitly continue without an image/);
+  assert.deepEqual(omittedFields(row), []);
+  row.imageOmitted = true;
+  assert.deepEqual(rowBlockers(row, [row]), []);
+  assert.deepEqual(omittedFields(row), ['productImage']);
+});
+
+test('declining one hyperlink does not decide another hyperlink using the same folder', () => {
+  const row = review();
+  row.row.links = [
+    { id: 'spec', header: 'Specifications', detailKey: 'productSpecifications', url: 'https://dropbox.com/sh/folder', kind: 'document' },
+    { id: 'image', header: 'Product Image', detailKey: 'productImage', url: 'https://dropbox.com/sh/folder', kind: 'image' },
+  ];
+  row.links.spec = { discovered: true, candidates: [], declined: true };
+  row.links.image = { discovered: true, candidates: [{ id: 'one', name: 'one.jpg', mimeType: 'image/jpeg', size: 5 }], sourceType: 'folder' };
+  assert.match(rowBlockers(row, [row]).join(' '), /Product Image: select a file or choose None/);
+  assert.deepEqual(omittedFields(row), ['productSpecifications']);
+  row.links.image.declined = true;
+  row.imageOmitted = true;
+  assert.deepEqual(rowBlockers(row, [row]), []);
+  assert.deepEqual(omittedFields(row), ['productSpecifications', 'productImage']);
+});
+
+test('an unavailable linked file is omitted only after an explicit None decision', () => {
+  const row = review(); row.imageOmitted = true;
+  row.row.links = [{ id: 'spec', header: 'Specifications', detailKey: 'productSpecifications', url: 'https://dropbox.com/sh/folder', kind: 'document' }];
+  row.links.spec = { discovered: true, candidates: [], error: 'No eligible files' };
+  assert.deepEqual(rowBlockers(row, [row]), ['Specifications: No eligible files']);
+  row.links.spec.declined = true;
+  assert.deepEqual(rowBlockers(row, [row]), []);
+  assert.deepEqual(omittedFields(row), ['productSpecifications', 'productImage']);
+});
+
+test('a manual image overrides an earlier image omission but preserves declined documents', () => {
+  const row = review(); row.imageOmitted = true; row.manualImage = manual;
+  row.row.links = [
+    { id: 'spec', header: 'Specifications', detailKey: 'productSpecifications', url: 'https://dropbox.com/sh/folder', kind: 'document' },
+    { id: 'image', header: 'Product Image', detailKey: 'productImage', url: 'https://dropbox.com/sh/folder', kind: 'image' },
+  ];
+  row.links.spec = { discovered: true, candidates: [], declined: true };
+  row.links.image = { discovered: true, candidates: [], declined: true };
+  assert.deepEqual(omittedFields(row), ['productSpecifications']);
+  assert.deepEqual(rowBlockers(row, [row]), []);
+});
+
+test('omitting an image never resolves unrelated product validation errors', () => {
+  const row = review(); row.imageOmitted = true; row.row.errors = ['Order Code is required.'];
+  assert.deepEqual(rowBlockers(row, [row]), ['Order Code is required.']);
 });

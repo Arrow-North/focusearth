@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { parseCatalogueFile } from '@/lib/led-import/catalogue-parser';
 import { catalogueRequest, fileBase64 } from '@/lib/led-import/catalogue-api';
-import { rowBlockers, validateManualImage, type AssetCandidate, type DuplicateMatch, type RowReview } from '@/lib/led-import/import-review';
+import { omittedFields, rowBlockers, validateManualImage, type AssetCandidate, type DuplicateMatch, type RowReview } from '@/lib/led-import/import-review';
 import type { ImportLink } from '@/types/supplier-catalogue-import';
 
 type Discovery = { candidates: AssetCandidate[]; sourceType: 'file' | 'folder' };
@@ -66,15 +66,21 @@ export function useSupplierCatalogueImport() {
           if (link.kind === 'image' && item.manualImage) continue;
           try {
             const discovery = await discoverLink(link, Boolean(rowId));
-            const state = {
-              ...discovery, discovered: true,
-              selectedId: discovery.candidates.length === 1 ? discovery.candidates[0].id : undefined,
-              error: discovery.candidates.length ? undefined : `No eligible ${link.kind === 'image' ? 'image' : 'file'} is available for import.`,
-            };
-            setRows(current => current.map(value => value.row.id === item.row.id ? { ...value, links: { ...value.links, [link.id]: state } } : value));
+            setRows(current => current.map(value => {
+              if (value.row.id !== item.row.id) return value;
+              const previous = value.links[link.id];
+              const declined = Boolean(previous?.declined || (link.kind === 'image' && value.imageOmitted));
+              const selectedId = declined ? undefined
+                : discovery.candidates.some(candidate => candidate.id === previous?.selectedId) ? previous?.selectedId
+                : discovery.sourceType === 'file' && discovery.candidates.length === 1 ? discovery.candidates[0].id : undefined;
+              return { ...value, links: { ...value.links, [link.id]: {
+                ...discovery, discovered: true, declined, selectedId,
+                error: discovery.candidates.length ? undefined : `No eligible ${link.kind === 'image' ? 'image' : 'file'} is available for import.`,
+              } } };
+            }));
           } catch (e) {
             const message = e instanceof Error ? e.message : 'Linked files are not available for import.';
-            setRows(current => current.map(value => value.row.id === item.row.id ? { ...value, links: { ...value.links, [link.id]: { discovered: true, candidates: [], error: message } } } : value));
+            setRows(current => current.map(value => value.row.id === item.row.id ? { ...value, links: { ...value.links, [link.id]: { discovered: true, candidates: [], declined: value.links[link.id]?.declined || (link.kind === 'image' && value.imageOmitted), error: message } } } : value));
           }
         }
         setProgress({ completed: index + 1, total: selected.length });
@@ -85,13 +91,38 @@ export function useSupplierCatalogueImport() {
     setRows(current => current.map(item => item.row.id === rowId ? {
       ...item, error: undefined,
       manualImage: item.row.links.find(link => link.id === linkId)?.kind === 'image' ? undefined : item.manualImage,
-      links: { ...item.links, [linkId]: { ...item.links[linkId], selectedId: candidateId } },
+      imageOmitted: item.row.links.find(link => link.id === linkId)?.kind === 'image' ? false : item.imageOmitted,
+      links: { ...item.links, [linkId]: { ...item.links[linkId], selectedId: candidateId, declined: false } },
     } : item));
+  }
+  function declineCandidate(rowId: string, linkId: string) {
+    setRows(current => current.map(item => {
+      if (item.row.id !== rowId) return item;
+      const image = item.row.links.find(link => link.id === linkId)?.kind === 'image';
+      return { ...item, error: undefined, manualImage: image ? undefined : item.manualImage,
+        imageOmitted: image ? true : item.imageOmitted,
+        links: { ...item.links, [linkId]: { ...item.links[linkId], selectedId: undefined, declined: true } },
+      };
+    }));
+  }
+  function omitImage(rowId: string) {
+    setRows(current => current.map(item => item.row.id !== rowId ? item : {
+      ...item, error: undefined, imageOmitted: true, manualImage: undefined,
+      links: Object.fromEntries(Object.entries(item.links).map(([id, state]) => [id,
+        item.row.links.find(link => link.id === id)?.kind === 'image' ? { ...state, selectedId: undefined, declined: true } : state,
+      ])),
+    }));
   }
   function manualImage(rowId: string, file?: File) {
     const issue = file && validateManualImage(file);
     if (issue) { setError(issue); return; }
-    updateRow(rowId, { manualImage: file }); setError(undefined);
+    setRows(current => current.map(item => item.row.id !== rowId ? item : {
+      ...item, error: undefined, manualImage: file, imageOmitted: file ? false : item.imageOmitted,
+      links: file ? Object.fromEntries(Object.entries(item.links).map(([id, state]) => [id,
+        item.row.links.find(link => link.id === id)?.kind === 'image' ? { ...state, selectedId: undefined, declined: false } : state,
+      ])) : item.links,
+    }));
+    setError(undefined);
   }
   async function commit() {
     if (active.current || !companyId || rows.some(row => rowBlockers(row, rows).length)) return;
@@ -108,13 +139,15 @@ export function useSupplierCatalogueImport() {
         try {
           const match = item.matches.find(value => value.id === item.existingProductId);
           const image = item.manualImage;
+          const omitted = omittedFields(item);
           const result = await catalogueRequest<{ status: 'created' | 'updated' | 'skipped' }>({
             action: 'commit', importId: importId.current, rowId: item.row.id, companyId,
             category: item.row.category, orderCode: item.row.orderCode,
             details: { ...item.row.details, sourceValues: item.row.sourceValues, sourceFile: fileName, sourceRow: item.row.rowNumber },
             sourceLinks: item.row.links,
             decision: item.decision, existingProductId: match?.id, existingUpdatedAt: match?.updatedAt,
-            attachments: item.row.links.filter(link => !(image && link.kind === 'image')).map(link => ({ field: link.detailKey, candidateId: item.links[link.id].selectedId })),
+            attachments: item.row.links.filter(link => !(image && link.kind === 'image') && !omitted.includes(link.detailKey)).map(link => ({ field: link.detailKey, candidateId: item.links[link.id].selectedId })),
+            omittedFields: omitted,
             manualImage: image ? { name: image.name, mimeType: image.type, base64: await fileBase64(image) } : undefined,
           });
           updateRow(item.row.id, { outcome: result.status });
@@ -131,5 +164,5 @@ export function useSupplierCatalogueImport() {
     if (active.current) return;
     setRows([]); setFileName(''); setCompanyId(undefined); setError(undefined); cache.current.clear();
   }
-  return { rows, fileName, companyId, busy, progress, error, parse, discover, updateRow, selectCandidate, manualImage, commit, reset };
+  return { rows, fileName, companyId, busy, progress, error, parse, discover, updateRow, selectCandidate, declineCandidate, omitImage, manualImage, commit, reset };
 }

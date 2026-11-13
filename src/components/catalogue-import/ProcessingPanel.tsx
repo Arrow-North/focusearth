@@ -138,7 +138,7 @@ export function ProcessingPanel({
               tone="text-[#7BA23F]"
             />
             <Counter
-              label="Image repos"
+              label="Collection fields reviewed"
               value={progress?.imageRepos ?? 0}
               tone="text-[#F5A623]"
             />
