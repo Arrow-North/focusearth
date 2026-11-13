@@ -12,7 +12,7 @@ import {
   ResultPanel,
 } from '@/components/catalogue-import';
 import { useCatalogueImport } from '@/hooks/use-catalogue-import';
-import { ACCEPTED_EXTENSIONS, MAX_INPUT_FILE_SIZE } from '@/lib/catalogue-import/constants';
+import { MAX_INPUT_FILE_SIZE } from '@/lib/catalogue-import/constants';
 import { cn } from '@/lib/utils';
 
 type Step = 'configure' | 'upload' | 'map' | 'preview' | 'process';
@@ -122,13 +122,14 @@ export default function CatalogueImport() {
                 <div className="text-center mb-6">
                   <h2 className="text-lg font-semibold mb-2">Upload Product File</h2>
                   <p className="text-muted-foreground">
-                    CSV or Excel. Every original column is preserved; four resolved
+                    CSV files only. Every original column is preserved; four resolved
                     columns are appended to the output.
                   </p>
                 </div>
                 <FileDropzone
                   onFilesSelected={handleFiles}
-                  accept={ACCEPTED_EXTENSIONS.join(',')}
+                  accept=".csv"
+                  acceptedFormatsLabel="CSV"
                   multiple={false}
                   maxSize={MAX_INPUT_FILE_SIZE}
                   isUploading={imp.phase === 'uploading' && !imp.table}

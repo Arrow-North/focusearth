@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 interface FileDropzoneProps {
   onFilesSelected: (files: File[]) => void;
   accept?: string;
+  acceptedFormatsLabel?: string;
   multiple?: boolean;
   maxSize?: number; // in bytes
   isUploading?: boolean;
@@ -20,6 +21,7 @@ const DEFAULT_MAX_SIZE = 10 * 1024 * 1024; // 10MB
 export function FileDropzone({
   onFilesSelected,
   accept = DEFAULT_ACCEPT,
+  acceptedFormatsLabel = 'PDF, images',
   multiple = true,
   maxSize = DEFAULT_MAX_SIZE,
   isUploading = false,
@@ -33,7 +35,7 @@ export function FileDropzone({
 
   const validateFiles = useCallback(
     (files: File[]): File[] => {
-      const acceptedTypes = accept.split(',').map((t) => t.trim());
+      const acceptedTypes = accept.toLowerCase().split(',').map((t) => t.trim()).filter(Boolean);
       const validFiles: File[] = [];
 
       for (const file of files) {
@@ -44,13 +46,14 @@ export function FileDropzone({
         }
 
         // Check file type
-        const isValidType = acceptedTypes.some((acceptType) => {
+        const isValidType = acceptedTypes.length === 0 || acceptedTypes.some((acceptType) => {
           if (acceptType === '*/*') return true;
+          if (acceptType.startsWith('.')) return file.name.toLowerCase().endsWith(acceptType);
           if (acceptType.endsWith('/*')) {
-            const category = acceptType.replace('/*', '');
-            return file.type.startsWith(category);
+            const category = acceptType.slice(0, -1);
+            return file.type.toLowerCase().startsWith(category);
           }
-          return file.type === acceptType;
+          return file.type.toLowerCase() === acceptType;
         });
 
         if (!isValidType) {
@@ -68,7 +71,7 @@ export function FileDropzone({
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
-      if (!files || disabled) return;
+      if (!files?.length || disabled || isUploading) return;
 
       setError(null);
       const fileArray = Array.from(files);
@@ -79,7 +82,7 @@ export function FileDropzone({
         onFilesSelected(validFiles);
       }
     },
-    [validateFiles, multiple, onFilesSelected, disabled]
+    [validateFiles, multiple, onFilesSelected, disabled, isUploading]
   );
 
   const handleDragOver = useCallback(
@@ -176,7 +179,7 @@ export function FileDropzone({
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
-              PDF, images up to {Math.round(maxSize / 1024 / 1024)}MB
+              {acceptedFormatsLabel} up to {Math.round(maxSize / 1024 / 1024)}MB
             </p>
           </div>
         )}

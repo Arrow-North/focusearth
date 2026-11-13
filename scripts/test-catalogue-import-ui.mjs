@@ -13,7 +13,7 @@ const { JSDOM } = await import(process.env.JSDOM_MODULE || 'jsdom');
 const repo = fileURLToPath(new URL('../', import.meta.url));
 const work = await mkdtemp(join(tmpdir(), 'focusearth-ui-test-'));
 const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'https://test.example/catalogues/import' });
-for (const key of ['window', 'document', 'HTMLElement', 'HTMLInputElement', 'HTMLSelectElement', 'Event', 'MouseEvent', 'FileReader']) {
+for (const key of ['window', 'document', 'Node', 'Element', 'DocumentFragment', 'MutationObserver', 'HTMLElement', 'HTMLInputElement', 'HTMLSelectElement', 'Event', 'CustomEvent', 'MouseEvent', 'FileReader']) {
   Object.defineProperty(globalThis, key, { value: key === 'window' ? dom.window : dom.window[key], configurable: true });
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -28,6 +28,8 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import assert from 'node:assert/strict';
 import CataloguePage from './src/pages/LEDCatalogueImport';
+import ProductFilePage from './src/pages/CatalogueImport';
+import { FileDropzone } from './src/components/shared/FileDropzone';
 
 const requests = [];
 const companyQueries = [];
@@ -162,7 +164,51 @@ export async function run() {
     await click(findButton('Import reviewed products'));
     check(requests.filter(request => request.action === 'commit').length === previousCount, 'skipped rows never upload files or products');
     check(document.body.textContent.includes('Skipped: 4'), 'skip outcomes are summarized');
-    console.log('UI behavioral QA passed: ' + assertions + ' assertions (actual page, hook, review components; mocked transport).');
+    const accepted = [];
+    await act(async () => root.render(<FileDropzone accept=".csv" acceptedFormatsLabel="CSV" multiple={false} maxSize={2 * 1024 * 1024} onFilesSelected={files => accepted.push(files)} />));
+    const csvInput = document.querySelector('input[type="file"]');
+    for (const type of ['text/csv', 'application/vnd.ms-excel', 'application/octet-stream', '']) {
+      const before = accepted.length;
+      await upload(csvInput, new File([csv], 'Fixtures-Table 1.csv', { type }));
+      check(accepted.length === before + 1, 'CSV file picker accepts extension regardless of browser MIME: ' + type);
+      check(!document.body.textContent.includes('unsupported type'), 'supported CSV has no type error');
+    }
+    const dropped = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(dropped, 'dataTransfer', { value: { files: [new File([csv], 'Fixtures-Table 1.CSV')] } });
+    await act(async () => csvInput.parentElement.dispatchEvent(dropped)); await settle();
+    check(accepted.at(-1)[0].name.endsWith('.CSV'), 'drag and drop supports uppercase CSV extensions without MIME');
+    const beforeInvalid = accepted.length;
+    for (const name of ['Fixtures-Table 1.xlsm', 'Fixtures-Table 1.csv.exe']) {
+      await upload(csvInput, new File([csv], name, { type: 'text/csv' }));
+      check(accepted.length === beforeInvalid, 'CSV-only dropzone rejects unsupported filename even with CSV MIME');
+      check(document.body.textContent.includes('unsupported type'), 'unsupported extension is called out');
+    }
+    const oversized = new File(['data'], 'Fixtures.csv', { type: 'text/csv' });
+    Object.defineProperty(oversized, 'size', { value: 2 * 1024 * 1024 + 1 });
+    await upload(csvInput, oversized);
+    check(accepted.length === beforeInvalid && document.body.textContent.includes('exceeds maximum size'), 'CSV extension does not bypass size validation');
+    check(document.body.textContent.includes('CSV up to 2MB'), 'CSV dropzone displays accurate accepted-format guidance');
+    await act(async () => root.render(<FileDropzone onFilesSelected={files => accepted.push(files)} />));
+    const defaultInput = document.querySelector('input[type="file"]');
+    const beforeDefault = accepted.length;
+    await upload(defaultInput, new File(['png'], 'photo.png', { type: 'image/png' }));
+    await upload(defaultInput, new File(['pdf'], 'spec.pdf', { type: 'application/pdf' }));
+    check(accepted.length === beforeDefault + 2, 'shared image and PDF upload behavior is preserved');
+    await upload(defaultInput, new File(['csv'], 'Fixtures.csv', { type: 'text/csv' }));
+    check(accepted.length === beforeDefault + 2, 'default image/PDF dropzone still rejects CSV');
+
+    await act(async () => root.render(<QueryClientProvider client={queryClient}><ProductFilePage /></QueryClientProvider>));
+    await click(findButton('Choose upload test company and type'));
+    await click(findButton('Continue'));
+    check(document.body.textContent.includes('Upload Product File'), 'actual product upload screen is mounted');
+    const productInput = document.querySelector('input[type="file"]');
+    check(productInput.accept === '.csv', 'Upload Product File restricts its picker to CSV');
+    check(document.body.textContent.includes('CSV up to'), 'Upload Product File shows CSV guidance');
+    await upload(productInput, new File([csv], 'Fixtures-Table 1.csv', { type: 'application/vnd.ms-excel' }));
+    check(!document.body.textContent.includes('unsupported type'), 'reported CSV upload is not rejected by shared MIME validation');
+    check(!document.body.textContent.includes('Upload Product File'), 'valid CSV advances the real page to column mapping');
+    check(document.body.textContent.includes('7 columns detected') && document.body.textContent.includes(folder), 'column mapping shows parsed CSV headers and linked sample data');
+    console.log('UI behavioral QA passed: ' + assertions + ' assertions (actual import pages, shared dropzone, hooks, and review components; mocked transport/configuration).');
   } finally { await act(async () => root.unmount()); queryClient.clear(); }
 }
 `;
@@ -179,9 +225,11 @@ try {
       builder.onResolve({ filter: /^@\/lib\/supabase$/ }, () => ({ path: 'supabase', namespace: 'mock' }));
       builder.onResolve({ filter: /^@\/hooks\/use-companies$/ }, () => ({ path: 'companies', namespace: 'mock' }));
       builder.onResolve({ filter: /^@\/components\/layout\/DashboardLayout$/ }, () => ({ path: 'layout', namespace: 'mock' }));
+      builder.onResolve({ filter: /^\.\/ImportConfigStep$/ }, args => args.importer.endsWith('/components/catalogue-import/index.ts') ? { path: 'upload-config', namespace: 'mock' } : undefined);
       builder.onLoad({ filter: /.*/, namespace: 'mock' }, ({ path }) => ({ contents:
         path === 'supabase' ? 'export const supabase = { functions: { invoke: (...args) => globalThis.__catalogueMock.invoke(...args) } };' :
         path === 'companies' ? 'export function useCompanies(filters) { return globalThis.__catalogueMock.companies(filters); }' :
+        path === 'upload-config' ? 'import React from "react"; export function ImportConfigStep(props) { return React.createElement("button", { onClick() { props.onCompanyChange(42, "Test supplier"); props.onLuminaireTypeChange("Fixtures"); } }, "Choose upload test company and type"); }' :
         'export function DashboardLayout({children}) { return children; }', loader: 'js' }));
     } }],
     logLevel: 'warning',

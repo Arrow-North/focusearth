@@ -57,7 +57,7 @@ export default function Catalogues() {
               >
                 <span className="font-medium">Resolve assets to CSV</span>
                 <span className="text-xs text-muted-foreground">
-                  CSV or Excel for one company and luminaire type. Mirrors
+                  CSV for one company and luminaire type. Mirrors
                   images and spec sheets to storage and returns a CSV.
                 </span>
               </DropdownMenuItem>
