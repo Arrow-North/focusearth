@@ -85,7 +85,7 @@ supabase login
 supabase link --project-ref your-project-ref
 
 # Push database migrations
-supabase db push
+supabase db push --remote
 
 # Deploy Edge Functions
 supabase functions deploy send-notification-email
@@ -93,6 +93,10 @@ supabase functions deploy send-notification-email
 # Set secrets
 supabase secrets set RESEND_API_KEY=your-resend-api-key
 ```
+
+The production GitHub Actions workflow pins Supabase CLI 3.1.0 and Node 22.23.0. CLI v3 targets the local database by default, so hosted migration commands must include `--remote` even after `supabase link`. CI supplies `SB_PROD_PASSWORD` through `SUPABASE_DB_PASSWORD` and passes `--yes` for the migration push and function deployment. The local email server uses `[local_smtp]`, as required by v3. See the [official CLI v3 migration guide](https://supabase.com/docs/guides/local-development/cli/migrating-to-v3).
+
+Verified on 2026-11-15 with Node 22.23.0 and the cached Supabase CLI 3.1.0 binary: workflow YAML parsing, Bash syntax for every run step, CLI flag availability, and loading the updated config in an isolated unlinked directory passed. No hosted migration or function deployment was run; remote execution still needs verification in GitHub Actions.
 
 ### Frontend Deployment
 
