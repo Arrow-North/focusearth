@@ -3,6 +3,9 @@ import { supabase } from '@/lib/supabase';
 export async function catalogueRequest<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('catalogue-import', { body });
   if (error) {
+    if (error.name === 'FunctionsFetchError') {
+      throw new Error('Could not reach the catalogue-import backend. Check your connection and ask an administrator to verify that the Edge Function is deployed to this app’s Supabase project and allows browser requests (CORS), then retry.');
+    }
     let message = error.message;
     if ('context' in error && error.context instanceof Response) {
       try {

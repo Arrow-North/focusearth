@@ -89,7 +89,7 @@ export function decode64(value: string): Uint8Array {
 }
 const url64 = (bytes: Uint8Array) => encode64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const fromUrl64 = (value: string) => decode64(value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '='));
-export interface CandidateClaim { userId: string; url: string; path?: string; name: string; mimeType: string; size: number; revision?: string; expires: number }
+export interface CandidateClaim { userId: string; url: string; path?: string; name: string; mimeType: string; size: number; revision?: string; source?: 'public'; expires: number }
 async function signingKey(secret: string) { return crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']); }
 export async function signCandidate(claim: CandidateClaim, secret: string): Promise<string> {
   const data = new TextEncoder().encode(JSON.stringify(claim));

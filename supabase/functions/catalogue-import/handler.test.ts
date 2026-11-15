@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import ts from 'typescript';
 import * as support from './support.ts';
+import * as publicDropbox from './public-dropbox.ts';
+import { folderZip } from './zip-fixture.ts';
 
 const admin = '10000000-0000-4000-8000-000000000001';
 const shared = 'https://www.dropbox.com/sh/folder/token?dl=0';
@@ -25,8 +27,10 @@ interface State {
   rpcPersistThenError?: boolean;
   downloadSize?: number;
   downloadRevision?: string;
+  publicBytes?: Uint8Array;
+  publicDenied?: boolean;
 }
-async function harness() {
+async function harness(useApi = true, envOverrides: Record<string,string> = {}) {
   const state: State = { profile:{type:'SUPERADMIN',enabled:true,is_deleted:false},linkPermissions:{effective_audience:{'.tag':'public'},allow_download:true,require_password:false},supplier:true,prior:null,products:[],fetches:[],uploads:[],removed:[],committed:[] };
   let handler: (request:Request)=>Promise<Response>;
   const service = {
@@ -55,6 +59,11 @@ async function harness() {
   };
   const fakeFetch = async (input:string|URL|Request, init?:RequestInit) => {
     const url = new URL(String(input)); state.fetches.push(url.toString());
+    if (url.hostname === 'www.dropbox.com') {
+      assert.equal(init?.redirect,'manual');assert.equal(init?.credentials,'omit');assert.equal(init?.headers,undefined);
+      assert.equal(url.searchParams.get('dl'),'1');
+      return state.publicDenied ? new Response('<html>No Access</html>',{headers:{'content-type':'text/html'}}) : new Response(state.publicBytes || folderZip({'nested/photo.png':png,'spec.pdf':new TextEncoder().encode('%PDF-1.7\n')}));
+    }
     assert.ok(['api.dropboxapi.com','content.dropboxapi.com'].includes(url.hostname), `Unexpected external host ${url.hostname}`);
     assert.equal(init?.redirect,'error');
     const route = url.pathname;
@@ -73,10 +82,12 @@ async function harness() {
   const source = (await readFile(new URL('./index.ts',import.meta.url),'utf8')).replace(/^import .*\n/gm,'');
   const javascript = ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
   const env:Record<string,string>={SUPABASE_URL:'https://example.supabase.co',SUPABASE_SERVICE_ROLE_KEY:secret,DROPBOX_ACCESS_TOKEN:'dropbox-test-token'};
+  if (!useApi) delete env.DROPBOX_ACCESS_TOKEN;
+  Object.assign(env,envOverrides);
   const timeout = (callback:()=>void,ms:number) => { const timer=setTimeout(callback,ms);timer.unref();return timer; };
   // Run the exact handler source with only its two imports replaced by test dependencies.
-  new Function('createClient','Deno','fetch','setTimeout',...Object.keys(support),javascript)(
-    ()=>service,{env:{get:(key:string)=>env[key]},serve:(value:typeof handler)=>{handler=value;}},fakeFetch,timeout,...Object.values(support),
+  new Function('createClient','Deno','fetch','setTimeout',...Object.keys(support),...Object.keys(publicDropbox),javascript)(
+    ()=>service,{env:{get:(key:string)=>env[key]},serve:(value:typeof handler)=>{handler=value;}},fakeFetch,timeout,...Object.values(support),...Object.values(publicDropbox),
   );
   const request = async (body:Record<string,unknown>,token='valid-token') => {
     const response = await handler(new Request('https://example.supabase.co/functions/v1/catalogue-import',{method:'POST',headers:{'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body)}));
@@ -91,6 +102,48 @@ function payload(overrides:Record<string,unknown>={}) {
   return {action:'commit',companyId:1,category:'lamp',orderCode:'ABC',importId,rowId:'Lamps:4',decision:'create',details:{description:'Bulb',sourceValues:{'Order Code':'ABC'}},attachments:[],sourceLinks:[],...overrides};
 }
 const manual = {name:'manual.png',mimeType:'image/png',base64:support.encode64(png)};
+
+test('without Dropbox keys, discovery, previews and both import destinations use anonymous public downloads',async()=>{
+  const {request,state}=await harness(false);
+  const discovery=await request({action:'discover',url:shared,kind:'document'});
+  assert.equal(discovery.status,200);assert.equal(discovery.body.sourceType,'folder');assert.equal(discovery.body.candidates.length,2);
+  assert.equal(state.uploads.length,0);assert.equal(state.committed.length,0);
+  const image=discovery.body.candidates.find((entry:{mimeType:string})=>entry.mimeType==='image/png');
+  const document=discovery.body.candidates.find((entry:{mimeType:string})=>entry.mimeType==='application/pdf');
+  const claim=await support.verifyCandidate(image.id,admin,secret);assert.equal(claim.source,'public');
+  const preview=await request({action:'thumbnail',candidateId:image.id});
+  assert.equal(preview.status,200);assert.match(preview.body.previewUrl,/^data:image\/png;base64,/);
+  const stored=await request({action:'store-asset',companyId:1,luminaireType:'fixtures',productId:importId,field:'specifications',candidateId:document.id,url:shared});
+  assert.equal(stored.status,200);assert.equal(stored.body.bucket,'leds');
+  const committed=await request(payload({sourceLinks:[{detailKey:'productImage',url:shared},{detailKey:'productSpecifications',url:shared}],attachments:[{field:'productImage',candidateId:image.id},{field:'productSpecifications',candidateId:document.id}]}));
+  assert.equal(committed.status,200);assert.equal(state.uploads.length,3);assert.equal(state.committed.length,1);
+  assert.ok(state.fetches.every(url=>new URL(url).hostname==='www.dropbox.com'));
+});
+test('public candidates reject revoked access, replaced bytes and tampered selections before storage',async()=>{
+  const {request,state}=await harness(false);
+  const discovery=await request({action:'discover',url:shared,kind:'image'});const token=discovery.body.candidates[0].id;
+  state.publicDenied=true;
+  const revoked=await request({action:'discover',url:shared,kind:'image'});assert.equal(revoked.status,422);assert.match(revoked.body.error,/downloaded publicly/);
+  assert.equal((await request({action:'thumbnail',candidateId:token})).status,422);
+  const body=payload({sourceLinks:[{detailKey:'productImage',url:shared}],attachments:[{field:'productImage',candidateId:token}]});
+  assert.equal((await request(body)).status,422);
+  state.publicDenied=false;const changed=png.slice();changed[23]=12;state.publicBytes=folderZip({'nested/photo.png':changed});
+  const stale=await request(body);assert.equal(stale.status,400);assert.match(stale.body.error,/changed since preview/);
+  assert.equal((await request({action:'thumbnail',candidateId:token+'tampered'})).status,400);
+  assert.equal(state.uploads.length,0);assert.equal(state.committed.length,0);
+});
+test('anonymous downloads retain the super admin authorization gate',async()=>{
+  const {request,state}=await harness(false);
+  state.profile.type='Au';assert.equal((await request({action:'discover',url:shared,kind:'image'})).status,403);
+  state.profile.type='SUPERADMIN';state.profile.enabled=false;assert.equal((await request({action:'discover',url:shared,kind:'image'})).status,403);
+  assert.deepEqual(state.fetches,[]);
+});
+test('incomplete optional Dropbox credentials do not gate public discovery',async()=>{
+  const {request,state}=await harness(false,{DROPBOX_APP_KEY:'app-without-secret-or-refresh-token'});
+  const result=await request({action:'discover',url:shared,kind:'image'});
+  assert.equal(result.status,200);assert.equal(result.body.candidates.length,1);
+  assert.ok(state.fetches.every(url=>new URL(url).hostname==='www.dropbox.com'));
+});
 
 test('handler denies anonymous, expired, non-superadmin and disabled accounts before Dropbox access',async()=>{
   const {request,state}=await harness();

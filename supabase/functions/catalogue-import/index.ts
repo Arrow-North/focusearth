@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.93.2';
 import { ImportFailure, IMAGE_LIMIT, DOCUMENT_LIMIT, dropboxUrl, requirePublicDropboxLink, mimeForName, eligible, validateBytes, readBounded, encode64, decode64, signCandidate, verifyCandidate, listCollection, type CandidateClaim, type DropboxEntry } from './support.ts';
+import { discoverPublicDropbox, downloadPublicDropbox } from './public-dropbox.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
 const env = (key: string) => Deno.env.get(key) || '';
@@ -8,6 +9,7 @@ const service = createClient(SUPABASE_URL, env('SUPABASE_SERVICE_ROLE_KEY'), {au
 const secret = env('CATALOGUE_IMPORT_SIGNING_SECRET') || env('SUPABASE_SERVICE_ROLE_KEY');
 const categories = ['fixtures','lamp','power-supply','control','accessories'];
 let cachedToken = ''; let tokenExpires = 0;
+const hasDropboxApi = () => Boolean(env('DROPBOX_ACCESS_TOKEN') || (env('DROPBOX_REFRESH_TOKEN') && env('DROPBOX_APP_KEY') && env('DROPBOX_APP_SECRET')));
 
 async function dropboxToken(): Promise<string> {
   if (cachedToken && tokenExpires > Date.now()) return cachedToken;
@@ -22,7 +24,7 @@ async function dropboxToken(): Promise<string> {
     return cachedToken;
   }
   if (env('DROPBOX_ACCESS_TOKEN')) return env('DROPBOX_ACCESS_TOKEN');
-  throw new ImportFailure('Dropbox is not configured. Configure the backend Dropbox connection before discovering linked files.',503);
+  throw new ImportFailure('Refresh discovery to select this file using public Dropbox downloads.',409);
 }
 
 async function dropbox(route: string, body: unknown, content = false): Promise<Response> {
@@ -79,22 +81,37 @@ async function discover(body: Record<string,unknown>, userId: string) {
   const url = dropboxUrl(body.url);
   const kind = body.kind === 'image' ? 'image' : body.kind === 'document' ? 'document' : undefined;
   if (!kind) throw new ImportFailure('Invalid linked file kind.');
-  const metadata = await publicMetadata(url);
-  if (!['file','folder'].includes(metadata['.tag'])) throw new ImportFailure('Dropbox URL does not reference a file or folder.');
-  const entries = metadata['.tag'] === 'folder' ? await listCollection(url,api) : [{entry:metadata,path:undefined}];
+  const usePublic = !hasDropboxApi();
+  let sourceType: string;
+  let entries: Array<{entry:DropboxEntry;path?:string}>;
+  if (usePublic) {
+    ({sourceType,entries} = await discoverPublicDropbox(url,kind,body.legacy === true,fetch));
+  } else {
+    const metadata = await publicMetadata(url);
+    if (!['file','folder'].includes(metadata['.tag'])) throw new ImportFailure('Dropbox URL does not reference a file or folder.');
+    sourceType = metadata['.tag'];
+    entries = sourceType === 'folder' ? await listCollection(url,api) : [{entry:metadata,path:undefined}];
+  }
   const candidates = [];
   for (const {entry,path} of entries) {
     if (!eligible(entry.name,Number(entry.size),kind) || entry.is_downloadable === false) continue;
     if (body.legacy === true && !['image/jpeg','image/png','image/webp','image/gif','application/pdf'].includes(mimeForName(entry.name)!)) continue;
-    const claim: CandidateClaim = {userId,url,path,name:entry.name,mimeType:mimeForName(entry.name)!,size:Number(entry.size),revision:entry.rev,expires:Date.now()+24*60*60*1000};
+    const claim: CandidateClaim = {userId,url,path,name:entry.name,mimeType:mimeForName(entry.name)!,size:Number(entry.size),revision:entry.rev,...(usePublic ? {source:'public' as const} : {}),expires:Date.now()+24*60*60*1000};
     candidates.push({id:await signCandidate(claim,secret),name:path ? path.slice(1) : entry.name,mimeType:claim.mimeType,size:claim.size});
   }
-  return {sourceType:metadata['.tag'],candidates};
+  return {sourceType,candidates};
 }
 
 async function thumbnail(body: Record<string,unknown>, userId: string) {
   const claim = await verifyCandidate(body.candidateId,userId,secret);
   if (!claim.mimeType.startsWith('image/')) throw new ImportFailure('Only image candidates have thumbnails.');
+  if (claim.source === 'public') {
+    // Public downloads have no thumbnail API. Small original images can be
+    // previewed inline; larger files remain selectable by name.
+    if (claim.size > 1024*1024) throw new ImportFailure('Image preview is unavailable. You can still select this file by name.',422);
+    const bytes = await downloadPublicDropbox(claim,fetch);
+    return {previewUrl:`data:${claim.mimeType};base64,${encode64(bytes)}`};
+  }
   await publicMetadata(claim.url,claim.path);
   const response = await dropbox('files/get_thumbnail_v2',{resource:{'.tag':'link',url:claim.url,...(claim.path ? {path:claim.path} : {})},format:'jpeg',size:'w256h256',mode:'bestfit'},true);
   const bytes = await readBounded(response,1024*1024);
@@ -103,6 +120,7 @@ async function thumbnail(body: Record<string,unknown>, userId: string) {
 }
 
 async function downloadSelected(claim: CandidateClaim): Promise<Uint8Array> {
+  if (claim.source === 'public') return downloadPublicDropbox(claim,fetch);
   await publicMetadata(claim.url,claim.path);
   const response = await dropbox('sharing/get_shared_link_file',{url:claim.url,...(claim.path?{path:claim.path}:{})},true);
   const bytes = await readBounded(response,claim.mimeType.startsWith('image/')?IMAGE_LIMIT:DOCUMENT_LIMIT);

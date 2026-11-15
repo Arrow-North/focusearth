@@ -35,6 +35,7 @@ const requests = [];
 const companyQueries = [];
 let failD = true;
 let probeCollection = false;
+let failDiscoveryTransport = false;
 const downloads = [];
 URL.createObjectURL = blob => { downloads.push(blob); return 'blob:test-download'; };
 URL.revokeObjectURL = () => {};
@@ -64,6 +65,7 @@ globalThis.__catalogueMock = {
     if (body.action === 'duplicates') return { data: { duplicates: body.rows.map(row => ({ rowId: row.rowId, matches: row.orderCode === 'A' ? [{ id: 17, updatedAt: '2026-11-12T00:00:00Z', details: { description: 'Existing fixture' } }] : [] })) }, error: null };
     if (body.action === 'thumbnail') return { data: { previewUrl: 'data:image/jpeg;base64,/9j/2Q==' }, error: null };
     if (body.action === 'discover') {
+      if (failDiscoveryTransport) return { data: null, error: { name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function' } };
       if (body.url === unavailable) return { data: null, error: { message: 'Dropbox image is unavailable for import (HTTP 404).' } };
       if (body.url === folder) return { data: { sourceType: 'folder', candidates: body.kind === 'image' ? [candidate('img1', 'front.jpg', 'image/jpeg'), candidate('img2', 'back.png', 'image/png')] : [candidate('doc1', 'spec.pdf', 'application/pdf'), candidate('doc2', 'instructions.pdf', 'application/pdf')] }, error: null };
       if (body.url === doc) return { data: { sourceType: 'folder', candidates: [candidate('reference', 'reference.pdf', 'application/pdf'), candidate('other', 'other.pdf', 'application/pdf')] }, error: null };
@@ -249,7 +251,13 @@ export async function run() {
     const collectionCsv = ['Manufacturer,Order Code,Specifications,Installation Instructions,Product Image',
       ['Maker','L1',folder,folder,folder].join(','), ['Maker','L2','','',folder].join(',')].join('\n');
     await upload(document.querySelector('input[type="file"]'), new File([collectionCsv], 'Fixtures.csv', {type:'text/csv'}));
+    failDiscoveryTransport = true;
     await click(findButton('Preview')); await settle();
+    check(document.body.textContent.includes('Could not reach the catalogue-import backend'), 'transport failures identify the unreachable backend');
+    check(document.body.textContent.includes('Supabase project') && document.body.textContent.includes('CORS'), 'transport failure guidance identifies deployment and browser access checks');
+    check(!document.body.textContent.includes('Failed to send a request to the Edge Function'), 'generic SDK transport error is replaced with actionable guidance');
+    failDiscoveryTransport = false;
+    await click(findButton('Refresh collection files'));
     const collection = key => document.querySelector('[data-repository-key="' + key + '"]');
     const selectLegacy = async (key, name) => click(Array.from(collection(key).querySelectorAll('button')).find(button => button.textContent.includes(name)));
     check(findButton('Start Import').disabled, 'collection fields block import while choices remain undecided');
