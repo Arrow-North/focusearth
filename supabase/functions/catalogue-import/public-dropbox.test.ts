@@ -43,6 +43,17 @@ test('public folder ZIPs list nested eligible files independently for image, doc
   assert.deepEqual(await downloadPublicDropbox(await claimFor(folder,fetcher),fetcher),png);
   assert.deepEqual(await downloadPublicDropbox(await claimFor(folder,fetchFile(folderZip({'front.png':png},false))),fetchFile(folderZip({'front.png':png},false))),png);
 });
+test('Dropbox ZIPs with an empty root marker and streamed file descriptors support discovery and extraction',async()=>{
+  const archive=folderZip({'/':new Uint8Array(),'front.png':png,'spec.pdf':pdf},false,true);
+  const fetcher=fetchFile(archive,{'content-disposition':'attachment; filename="nested.zip"'});
+  const url='https://www.dropbox.com/sh/folder/token/nested?dl=0';
+  const discovery=await discoverPublicDropbox(url,'document',false,fetcher);
+  assert.equal(discovery.sourceType,'folder');assert.deepEqual(discovery.entries.map(value=>value.path),['/front.png','/spec.pdf']);
+  assert.deepEqual(await downloadPublicDropbox(await claimFor(url,fetcher),fetcher),png);
+  const selected=discovery.entries.find(value=>value.entry.name==='spec.pdf')!;
+  const claim:CandidateClaim={userId:'admin',url,path:selected.path,name:selected.entry.name,mimeType:'application/pdf',size:selected.entry.size!,revision:selected.entry.rev,source:'public',expires:Date.now()+60000};
+  assert.deepEqual(await downloadPublicDropbox(claim,fetcher),pdf);
+});
 test('nested shared links keep discovery within their subtree when Dropbox downloads the parent folder',async()=>{
   const url='https://www.dropbox.com/sh/folder/token/nested?dl=0';
   const entries=(await discoverPublicDropbox(url,'document',false,fetchFile(fixture()))).entries;
@@ -94,9 +105,10 @@ test('size limits apply to the public response, central directory and decompress
   await assert.rejects(discoverPublicDropbox(folder,'document',false,fetchFile(tooMany)),/5,000 entries/);
 });
 test('unsafe or corrupt ZIPs fail explicitly instead of returning a partial listing',async()=>{
-  for (const name of ['../front.png','/front.png','nested/../front.png','nested\\front.png','front\u0000.png']) {
+  for (const name of ['../front.png','/front.png','nested/../front.png','nested\\front.png','front\u0000.png','/']) {
     await assert.rejects(discoverPublicDropbox(folder,'image',false,fetchFile(folderZip({[name]:png}))),/invalid folder ZIP/);
   }
+  await assert.rejects(discoverPublicDropbox(folder,'image',false,fetchFile(folderZip({'/':new Uint8Array(),'front.png':png}))),/invalid folder ZIP/); // A compressed "/" is not Dropbox's empty stored marker.
   await assert.rejects(discoverPublicDropbox(folder,'image',false,fetchFile(fixture().subarray(0,40))),/invalid folder ZIP/);
   const encrypted=folderZip({'front.png':png});const view=new DataView(encrypted.buffer);const central=view.getUint32(encrypted.length-6,true);view.setUint16(central+8,0x801,true);
   await assert.rejects(discoverPublicDropbox(folder,'image',false,fetchFile(encrypted)),/invalid folder ZIP/);

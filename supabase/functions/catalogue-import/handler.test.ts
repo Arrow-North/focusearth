@@ -105,6 +105,7 @@ const manual = {name:'manual.png',mimeType:'image/png',base64:support.encode64(p
 
 test('without Dropbox keys, discovery, previews and both import destinations use anonymous public downloads',async()=>{
   const {request,state}=await harness(false);
+  state.publicBytes=folderZip({'/':new Uint8Array(),'nested/photo.png':png,'spec.pdf':new TextEncoder().encode('%PDF-1.7\n')},false,true);
   const discovery=await request({action:'discover',url:shared,kind:'document'});
   assert.equal(discovery.status,200);assert.equal(discovery.body.sourceType,'folder');assert.equal(discovery.body.candidates.length,2);
   assert.equal(state.uploads.length,0);assert.equal(state.committed.length,0);

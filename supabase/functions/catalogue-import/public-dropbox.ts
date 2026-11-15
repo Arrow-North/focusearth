@@ -95,7 +95,10 @@ function zipEntries(bytes: Uint8Array): ZipEntry[] {
       compressedTotal += compressedSize;
       if (compressedTotal > bytes.length) throw invalid();
       const name = new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(offset + 46, offset + 46 + nameLength));
-      if (!name || name.length > 4096 || name.startsWith('/') || name.includes('\\') || Array.from(name).some(char => char.charCodeAt(0) < 32) || name.split('/').some(part => part === '..' || part === '.') || names.has(name)) throw invalid();
+      // Dropbox adds a stored, empty "/" directory marker to folder ZIPs.
+      // It is not a file path and is never returned as an import candidate.
+      const rootDirectory = name === '/' && originalSize === 0 && compressedSize === 0 && method === 0;
+      if (!name || name.length > 4096 || (name.startsWith('/') && !rootDirectory) || name.includes('\\') || Array.from(name).some(char => char.charCodeAt(0) < 32) || name.split('/').some(part => part === '..' || part === '.') || names.has(name)) throw invalid();
       names.add(name);
       if (local + 30 > u32(end + 16) || u32(local) !== 0x04034b50 || u16(local + 6) !== flags || u16(local + 8) !== method) throw invalid();
       const start = local + 30 + u16(local + 26) + u16(local + 28);
