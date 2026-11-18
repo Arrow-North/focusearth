@@ -300,6 +300,7 @@ export function useCatalogueImport(config: ImportConfig = DEFAULT_IMPORT_CONFIG)
   }, [repositoryLinks, repositoryReviews]);
 
   const chooseRepositoryFile = useCallback((key: string, candidateId?: string) => {
+    if (runActive.current) return;
     setRepositoryReviews(current => ({ ...current, [key]: {
       ...current[key], candidates: current[key]?.candidates || [], discovered: current[key]?.discovered || false,
       selectedId: candidateId, declined: !candidateId, error: candidateId ? undefined : current[key]?.error,

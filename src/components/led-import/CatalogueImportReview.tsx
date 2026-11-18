@@ -26,7 +26,7 @@ export function CatalogueImportReview({ importer }: { importer: Importer }) {
         <Button disabled={Boolean(busy) || blocked.length > 0 || !rows.some(row => !row.outcome)} onClick={importer.commit}>Import reviewed products</Button>
         <Button variant="ghost" disabled={Boolean(busy)} onClick={importer.reset}>Choose another file</Button>
       </div>
-      {busy && <p role="status" className="text-sm">{busy === 'discovering' ? 'Discovering linked files' : 'Importing products'}: {importer.progress.completed} / {importer.progress.total}. Keep this page open.</p>}
+      {busy && <p role="status" className="text-sm">{busy === 'discovering' ? 'Discovering linked files' : 'Importing products'}: {importer.progress.completed} / {importer.progress.total}. Keep this page open.{busy === 'discovering' ? ' You can choose files as they appear.' : ''}</p>}
       {completed.length > 0 && <p role="status" className="text-sm">Created: {completed.filter(row => row.outcome === 'created').length} · Updated: {completed.filter(row => row.outcome === 'updated').length} · Skipped: {completed.filter(row => row.outcome === 'skipped').length}. Successful rows will not be imported again when you retry.</p>}
       <div className="flex items-center gap-3"><label htmlFor="row-filter" className="text-sm">Show</label><select id="row-filter" value={filter} onChange={e => { setFilter(e.target.value); setPage(0); }} className="rounded border bg-background p-2 text-sm"><option value="all">All products</option><option value="attention">Needs attention</option><option value="ready">Ready to import</option><option value="finished">Finished</option></select></div>
     </CardContent></Card>
@@ -39,6 +39,7 @@ export function CatalogueImportReview({ importer }: { importer: Importer }) {
 function Row({ item, importer }: { item: RowReview; importer: Importer }) {
   const { row } = item;
   const disabled = Boolean(importer.busy || item.outcome);
+  const choicesLocked = Boolean(item.outcome || importer.busy === 'parsing' || importer.busy === 'importing');
   const issues = rowBlockers(item, importer.rows);
   return <Card>
     <CardHeader className="pb-3"><CardTitle className="text-base flex flex-wrap justify-between gap-3"><span>{row.orderCode || 'Missing order code'} <span className="text-xs font-normal text-muted-foreground">{row.category} · row {row.rowNumber}</span></span><span className={`text-sm ${item.outcome || item.decision === 'skip' || !issues.length ? 'text-green-700' : 'text-amber-700'}`}>{item.outcome ?? (item.decision === 'skip' ? 'Will skip' : issues.length ? 'Needs attention' : 'Ready')}</span></CardTitle></CardHeader>
@@ -69,8 +70,8 @@ function Row({ item, importer }: { item: RowReview; importer: Importer }) {
             <p className="text-xs break-all mt-2 text-muted-foreground">{link.url}</p>
             {state?.error && !overridden && !declined && <p role="alert" className="text-sm text-destructive mt-2">Not available for import: {state.error}</p>}
             {!overridden && state?.sourceType === 'folder' && <p className="text-sm mt-2">Choose one file from this collection for this hyperlink, or choose None of these.</p>}
-            {!overridden && state?.discovered && <Button className="mt-3" size="sm" variant="outline" disabled={disabled} aria-label={`None of these for ${link.header}`} aria-pressed={declined} onClick={() => importer.declineCandidate(row.id, link.id)}>None of these</Button>}
-            {!overridden && <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">{state?.candidates.map(candidate => <ImportAssetCandidate key={candidate.id} candidate={candidate} selected={state.selectedId === candidate.id} disabled={disabled} onSelect={() => importer.selectCandidate(row.id, link.id, candidate.id)} />)}</div>}
+            {!overridden && state?.discovered && <Button className="mt-3" size="sm" variant="outline" disabled={choicesLocked} aria-label={`None of these for ${link.header}`} aria-pressed={declined} onClick={() => importer.declineCandidate(row.id, link.id)}>None of these</Button>}
+            {!overridden && <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">{state?.candidates.map(candidate => <ImportAssetCandidate key={candidate.id} candidate={candidate} selected={state.selectedId === candidate.id} disabled={choicesLocked} onSelect={() => importer.selectCandidate(row.id, link.id, candidate.id)} />)}</div>}
           </details>;
         })}
         <div className="space-y-2"><label htmlFor={`image-${row.id}`} className="block text-sm font-medium">Upload a product image manually {item.manualImage ? `— ${item.manualImage.name}` : '(optional)'}</label><input id={`image-${row.id}`} type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={disabled} onChange={e => { importer.manualImage(row.id, e.target.files?.[0]); e.target.value = ''; }} className="block max-w-full text-sm" /><p className="text-xs text-muted-foreground">JPEG, PNG, WebP, or GIF. Maximum 10 MB.</p>{item.manualImage && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => importer.manualImage(row.id)}>Remove manual image</Button>}</div>

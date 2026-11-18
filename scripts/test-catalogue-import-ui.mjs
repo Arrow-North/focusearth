@@ -36,6 +36,18 @@ const companyQueries = [];
 let failD = true;
 let probeCollection = false;
 let failDiscoveryTransport = false;
+let discoveryHold = null;
+let importHold = null;
+function holdDiscovery(url, kind) {
+  let release;
+  const promise = new Promise(resolve => { release = resolve; });
+  discoveryHold = { url, kind, promise, release, requested: false };
+  return discoveryHold;
+}
+async function releaseDiscovery(hold) {
+  await act(async () => { discoveryHold = null; hold.release(); });
+  await settle();
+}
 const downloads = [];
 URL.createObjectURL = blob => { downloads.push(blob); return 'blob:test-download'; };
 URL.revokeObjectURL = () => {};
@@ -65,6 +77,11 @@ globalThis.__catalogueMock = {
     if (body.action === 'duplicates') return { data: { duplicates: body.rows.map(row => ({ rowId: row.rowId, matches: row.orderCode === 'A' ? [{ id: 17, updatedAt: '2026-11-12T00:00:00Z', details: { description: 'Existing fixture' } }] : [] })) }, error: null };
     if (body.action === 'thumbnail') return { data: { previewUrl: 'data:image/jpeg;base64,/9j/2Q==' }, error: null };
     if (body.action === 'discover') {
+      const hold = discoveryHold;
+      if (hold && body.url === hold.url && body.kind === hold.kind) {
+        hold.requested = true;
+        await hold.promise;
+      }
       if (failDiscoveryTransport) return { data: null, error: { name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function' } };
       if (body.url === unavailable) return { data: null, error: { message: 'Dropbox image is unavailable for import (HTTP 404).' } };
       if (body.url === folder) return { data: { sourceType: 'folder', candidates: body.kind === 'image' ? [candidate('img1', 'front.jpg', 'image/jpeg'), candidate('img2', 'back.png', 'image/png')] : [candidate('doc1', 'spec.pdf', 'application/pdf'), candidate('doc2', 'instructions.pdf', 'application/pdf')] }, error: null };
@@ -72,6 +89,7 @@ globalThis.__catalogueMock = {
       return { data: { sourceType: 'file', candidates: [body.kind === 'image' ? candidate('single-image', 'photo.jpg', 'image/jpeg') : candidate('single-doc', 'spec.pdf', 'application/pdf')] }, error: null };
     }
     if (body.action === 'commit') {
+      if (importHold && body.orderCode === importHold.orderCode) await importHold.promise;
       if (body.orderCode === 'D' && failD) { failD = false; return { data: null, error: { message: 'Temporary storage failure' } }; }
       return { data: { status: body.decision === 'update' ? 'updated' : 'created' }, error: null };
     }
@@ -130,7 +148,19 @@ export async function run() {
     check(rowDecision('A').value === 'unresolved', 'duplicates require an explicit decision');
     check(findButton('Import reviewed products').disabled, 'unresolved image and duplicate rows block commit');
     check(rowCard('C').textContent.includes('not available for import'), 'missing images are called out');
+    const supplierDiscovery = holdDiscovery(doc, 'document');
     await click(findButton('Discover linked files'));
+    check(supplierDiscovery.requested, 'supplier discovery remains in flight on a later linked folder');
+    check(document.body.textContent.includes('You can choose files as they appear'), 'supplier discovery explains that loaded files can be reviewed');
+    await choose('A', 'Product Image', 'front.jpg');
+    await choose('A', 'Specifications', 'spec.pdf');
+    check(fileSection('A','Specifications').querySelector('button:not([aria-label])[aria-pressed="true"]'), 'supplier document can be selected while another folder is loading');
+    await click(fileSection('A','Specifications').querySelector('[aria-label^="None of these"]'));
+    check(fileSection('A','Specifications').querySelector('[aria-label^="None of these"]').getAttribute('aria-pressed') === 'true', 'supplier None can be chosen during discovery');
+    check(findButton('Import reviewed products').disabled, 'supplier import remains blocked during discovery');
+    await releaseDiscovery(supplierDiscovery);
+    check(fileSection('A','Specifications').querySelector('[aria-label^="None of these"]').getAttribute('aria-pressed') === 'true', 'finishing supplier discovery preserves a None choice made during discovery');
+    check(Array.from(fileSection('A','Product Image').querySelectorAll('button')).some(button => button.textContent.includes('front.jpg') && button.getAttribute('aria-pressed') === 'true'), 'finishing supplier discovery preserves an image chosen during discovery');
     check(rowCard('D').textContent.includes('Not available for import'), 'inaccessible images are called out');
     check(fileSection('A','Product Image').querySelectorAll('button:not([aria-label])').length === 2, 'image folders expose all candidates');
     check(fileSection('A','Specifications').querySelectorAll('button:not([aria-label])').length === 2, 'document folders expose all candidates');
@@ -153,7 +183,12 @@ export async function run() {
     check(findButton('Import reviewed products').disabled, 'manual image does not bypass an unselected linked document');
     await choose('D', 'Specifications', 'reference.pdf');
     check(!findButton('Import reviewed products').disabled, 'manual fallback plus reviewed documents allows commit');
+    let finishImport;
+    importHold = { orderCode: 'A', promise: new Promise(resolve => { finishImport = resolve; }) };
     await click(findButton('Import reviewed products'));
+    check(fileSection('A','Product Image').querySelector('button:not([aria-label])').disabled, 'supplier image choices lock during an actual import');
+    check(fileSection('A','Specifications').querySelector('[aria-label^="None of these"]').disabled, 'supplier None choices lock during an actual import');
+    await act(async () => { importHold = null; finishImport(); }); await settle();
     const commits = requests.filter(request => request.action === 'commit');
     check(commits.length === 4, 'one request is sent per included row');
     check(commits.every(request => request.companyId === 42), 'every commit uses selected supplier');
@@ -283,6 +318,32 @@ export async function run() {
     const output = await downloads.at(-1).text();
     check(output.includes('img1') && output.includes('img2'), 'CSV output contains both independently selected image URLs');
     check(!output.includes('IMAGE_REPO') && !output.includes('FETCH_FAILED'), 'reviewed repository links are never emitted as failure or repo sentinels');
+
+    // Reproduce the reported disabled chooser while a later folder is still loading.
+    await act(async () => root.render(<div />));
+    await act(async () => root.render(<QueryClientProvider client={queryClient}><ProductFilePage /></QueryClientProvider>));
+    await click(findButton('Choose upload test company and type')); await click(findButton('Continue'));
+    const pendingCsv = ['Manufacturer,Order Code,Specifications,Product Image',
+      ['Maker','P1',folder,folder].join(','), ['Maker','P2','',doc].join(',')].join('\n');
+    await upload(document.querySelector('input[type="file"]'), new File([pendingCsv], 'Fixtures.csv', {type:'text/csv'}));
+    const legacyDiscovery = holdDiscovery(doc, 'image');
+    await click(findButton('Preview')); await settle();
+    check(legacyDiscovery.requested, 'CSV utility discovery remains in flight on a later folder');
+    check(document.body.textContent.includes('Loading linked files… You can choose files as they appear'), 'CSV utility distinguishes background discovery from a selection lock');
+    await selectLegacy('0:specifications','spec.pdf');
+    await selectLegacy('0:productImage','front.jpg');
+    check(collection('0:specifications').textContent.includes('Selected: spec.pdf'), 'CSV utility allows document selection while another folder loads');
+    check(collection('0:productImage').querySelector('button:not([aria-label])[aria-pressed="true"]'), 'CSV utility allows image selection while another folder loads');
+    await selectLegacy('1:productImage','None of these');
+    check(collection('1:productImage').querySelector('[aria-label^="None of these"]').getAttribute('aria-pressed') === 'true', 'CSV utility allows None even before that folder finishes loading');
+    check(document.body.textContent.includes('0 collection fields still need a choice'), 'all choices can be made while discovery is still in flight');
+    check(findButton('Start Import').disabled, 'all choices do not bypass the discovery guard on import');
+    check(findButton('Refresh collection files').disabled, 'an overlapping bulk refresh remains disabled during discovery');
+    await releaseDiscovery(legacyDiscovery);
+    check(collection('1:productImage').querySelector('[aria-label^="None of these"]').getAttribute('aria-pressed') === 'true', 'new discovery results preserve the None choice made while loading');
+    check(collection('0:specifications').textContent.includes('Selected: spec.pdf'), 'later discovery preserves a document selected while loading');
+    check(collection('0:productImage').querySelector('button:not([aria-label])[aria-pressed="true"]'), 'later discovery preserves an image selected while loading');
+    check(!findButton('Start Import').disabled, 'import enables once discovery and all choices finish');
 
     // A URL classified as a file can still be discovered as a collection by the backend.
     await act(async () => root.render(<div />));
