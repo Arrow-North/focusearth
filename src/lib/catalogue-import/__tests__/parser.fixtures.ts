@@ -15,6 +15,7 @@ import * as XLSX from 'xlsx';
 import type { ParsedTable } from '@/types/catalogue-import';
 
 import { parseCsv, toCsv } from '../csv';
+import { calculateColumnCoverage } from '../column-coverage';
 import {
   autoDetectMapping,
   cellUrl,
@@ -585,6 +586,59 @@ async function mappingSuite(): Promise<void> {
   });
 }
 
+async function coverageSuite(): Promise<void> {
+  console.log('\ncolumn coverage');
+  const headers = ['Order Code','Specifications','Installation Instructions','Product Image'];
+  const data = Array.from({length:12}, (_,index) => [
+    `P${index + 1}`,
+    index < 8 ? SPEC_A : index === 8 ? 'Download specification' : index === 9 ? '0' : index === 10 ? '  ' : '',
+    index === 0 ? `=HYPERLINK("${INSTALL_A}","Install")` : index === 1 ? `=HYPERLINK("${INSTALL_A}";"")` : index === 2 ? 'www.example.com/install.pdf' : '',
+    index >= 10 ? 'https://cdn.example.com/photo.jpg' : '',
+  ]);
+  const csv = toCsv(headers,[...data.slice(0,6),['','','',''],...data.slice(6)]);
+  const table = await parseTabularFile(makeFile(csv,'Coverage.csv'));
+  const mapping = autoDetectMapping(table.headers);
+  await check('counts all data rows, repeated links and populated non-URL cells separately', () => {
+    assert.equal(table.totalRows,12);
+    assert.deepEqual(calculateColumnCoverage(table,mapping), {
+      specifications:{total:12,filled:10,linked:8},
+      installationInstructions:{total:12,filled:3,linked:3},
+      productImage:{total:12,filled:2,linked:2},
+    });
+  });
+  await check('CSV HYPERLINK literals resolve with comma and semicolon separators', () => {
+    assert.equal(cellUrl(table,0,2),INSTALL_A);
+    assert.equal(cellUrl(table,1,2),INSTALL_A);
+    assert.equal(cellUrl(table,2,2),'https://www.example.com/install.pdf');
+    assert.equal(cellUrl({...table,rows:[['=HYPERLINK(A2,"Label")']]},0,0),null);
+  });
+  await check('unmapped fields remain separate from empty mapped columns, and column zero is counted', () => {
+    const counts = calculateColumnCoverage(table,{specifications:0,installationInstructions:2,productImage:null});
+    assert.deepEqual(counts.specifications,{total:12,filled:12,linked:0});
+    assert.deepEqual(counts.productImage,{total:12,filled:0,linked:0});
+  });
+  await check('empty input has exact zero counts without an invalid denominator', () => {
+    assert.deepEqual(calculateColumnCoverage(null,mapping).specifications,{total:0,filled:0,linked:0});
+  });
+  await check('blank-display Excel hyperlinks and literal formulas count as populated source cells', async () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      headers,['A','Download','',''],['B','','',''],['C','Install guide','',''],['D','Label without URL','',''],['','','',''],
+    ]);
+    ws.B2.l = {Target:SPEC_A};
+    ws.B3.l = {Target:SPEC_B};
+    ws.B4.f = `HYPERLINK("${SPEC_A}","Install guide")`;
+    ws.B6.l = {Target:SPEC_A}; // This row's display values are all blank.
+    const workbook = XLSX.utils.book_new();XLSX.utils.book_append_sheet(workbook,ws,'Products');
+    const bytes = XLSX.write(workbook,{type:'array',bookType:'xlsx'});
+    const parsed = await parseTabularFile(makeFile(new Uint8Array(bytes),'Coverage.xlsx'));
+    assert.equal(parsed.totalRows,5);
+    assert.equal(cellUrl(parsed,1,1),SPEC_B);
+    assert.equal(cellUrl(parsed,2,1),SPEC_A);
+    assert.equal(cellUrl(parsed,4,1),SPEC_A);
+    assert.deepEqual(calculateColumnCoverage(parsed,autoDetectMapping(parsed.headers)).specifications,{total:5,filled:5,linked:4});
+  });
+}
+
 // ─── Run ────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -593,6 +647,7 @@ async function main(): Promise<void> {
   await csvFileSuite();
   await validationSuite();
   await mappingSuite();
+  await coverageSuite();
 
   console.log(`\n${passed} passed, ${failures.length} failed`);
   if (failures.length > 0) {

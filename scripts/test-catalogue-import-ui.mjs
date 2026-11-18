@@ -30,6 +30,7 @@ import assert from 'node:assert/strict';
 import CataloguePage from './src/pages/LEDCatalogueImport';
 import ProductFilePage from './src/pages/CatalogueImport';
 import { FileDropzone } from './src/components/shared/FileDropzone';
+import { ImportPreviewTable } from './src/components/catalogue-import/ImportPreviewTable';
 
 const requests = [];
 const companyQueries = [];
@@ -398,6 +399,37 @@ export async function run() {
     const declinedOutput = await downloads.at(-1).text();
     check(!declinedOutput.includes('IMAGE_REPO') && !declinedOutput.includes('FETCH_FAILED'), 'explicit None leaves a blank resolved CSV field for late-discovered repositories');
     probeCollection = false;
+
+    // Source fill rates count all rows and populated cells, not unique URLs,
+    // review decisions, or only the ten rows shown in the preview.
+    await act(async () => root.render(<div />));
+    await act(async () => root.render(<QueryClientProvider client={queryClient}><ProductFilePage /></QueryClientProvider>));
+    await click(findButton('Choose upload test company and type')); await click(findButton('Continue'));
+    const coverageRows = Array.from({length:12}, (_,index) => [
+      'Maker', 'F' + (index + 1),
+      index < 8 ? folder : index === 8 ? 'Specification label' : index === 9 ? '0' : index === 10 ? '  ' : '',
+      index === 0 ? '=HYPERLINK("' + folder + '","Install")' : index === 1 ? '=HYPERLINK("' + doc + '";"")' : index === 2 ? 'www.example.com/install.pdf' : '',
+      index >= 10 ? image : '',
+    ]);
+    coverageRows.splice(6,0,['','','','','']);
+    const coverageCsv = 'Manufacturer,Order Code,Specifications,Installation Instructions,Product Image\n' + coverageRows.map(row => row.map(value => '"' + value.replace(/"/g,'""') + '"').join(',')).join('\n');
+    await upload(document.querySelector('input[type="file"]'), new File([coverageCsv], 'Coverage.csv', {type:'text/csv'}));
+    await click(findButton('Preview')); await settle();
+    const coverageCard = field => document.querySelector('[data-column-coverage="' + field + '"]');
+    check(coverageCard('specifications').textContent.includes('83.33%'), 'column fill percentage uses populated cells with useful decimal precision');
+    check(coverageCard('specifications').textContent.includes('10 of 12 rows filled'), 'column fill uses exact counts across every data row and excludes fully blank rows');
+    check(coverageCard('specifications').textContent.includes('8 links detected'), 'reused URLs count once for each source row');
+    check(coverageCard('specifications').textContent.includes('2 filled cells without a link'), 'non-URL source labels are counted as filled and clearly distinguished from hyperlinks');
+    check(coverageCard('installationInstructions').textContent.includes('25%') && coverageCard('installationInstructions').textContent.includes('3 links detected'), 'comma and semicolon HYPERLINK formulas and www links contribute to link coverage');
+    check(coverageCard('productImage').textContent.includes('16.67%') && coverageCard('productImage').textContent.includes('2 of 12 rows filled'), 'image coverage includes rows beyond the first ten preview rows');
+    check(document.querySelector('tbody tr td:nth-child(5)').textContent.includes('Image repo'), 'formula hyperlinks receive the same preview classification used by processing');
+    await selectLegacy('0:specifications','None of these');
+    check(coverageCard('specifications').textContent.includes('10 of 12 rows filled'), 'None choices do not change the source column fill rate');
+
+    const tinyCoverage = {specifications:{total:1000,filled:1,linked:1},installationInstructions:{total:1000,filled:0,linked:0},productImage:{total:1000,filled:0,linked:0}};
+    await act(async () => root.render(<ImportPreviewTable headers={['Specifications']} rows={[]} mapping={{specifications:0,installationInstructions:null,productImage:null}} classifications={[]} totalRows={1000} columnCoverage={tinyCoverage} estimatedFetches={1} estimatedRepos={0} />));
+    check(coverageCard('specifications').textContent.includes('0.1%'), 'small nonzero column fill rates are not rounded down to zero');
+    check(coverageCard('installationInstructions').textContent.includes('Not mapped') && !coverageCard('installationInstructions').textContent.includes('0%'), 'unmapped columns are not presented as zero-percent filled mapped columns');
     console.log('UI behavioral QA passed: ' + assertions + ' assertions (actual import pages, shared dropzone, hooks, and review components; mocked transport/configuration).');
   } finally { await act(async () => root.unmount()); queryClient.clear(); }
 }

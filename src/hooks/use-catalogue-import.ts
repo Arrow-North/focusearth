@@ -30,6 +30,7 @@ import {
 import { ASSET_FIELDS } from '@/types/catalogue-import';
 import { catalogueRequest } from '@/lib/led-import/catalogue-api';
 import { ImportAssetCache } from '@/lib/led-import/asset-cache';
+import { calculateColumnCoverage } from '@/lib/catalogue-import/column-coverage';
 import { repositoryKey, repositoryNeedsChoice, type RepositoryLink, type RepositoryReview } from '@/lib/catalogue-import/repository-review';
 import type {
   AssetField,
@@ -336,24 +337,7 @@ export function useCatalogueImport(config: ImportConfig = DEFAULT_IMPORT_CONFIG)
     });
   }, [table, mapping]);
 
-  const fillRates = useMemo(() => {
-    const rates: Record<AssetField, number> = {
-      specifications: 0,
-      installationInstructions: 0,
-      productImage: 0,
-    };
-    if (!table || table.rows.length === 0) return rates;
-    ASSET_FIELDS.forEach((field) => {
-      const col = mapping[field];
-      if (col == null) return;
-      let filled = 0;
-      for (let i = 0; i < table.rows.length; i++) {
-        if (cellUrl(table, i, col)) filled++;
-      }
-      rates[field] = filled / table.rows.length;
-    });
-    return rates;
-  }, [table, mapping]);
+  const columnCoverage = useMemo(() => calculateColumnCoverage(table, mapping), [table, mapping]);
 
   const estimates = useMemo(() => {
     if (!table) return { fetches: 0, repos: 0 };
@@ -739,7 +723,7 @@ export function useCatalogueImport(config: ImportConfig = DEFAULT_IMPORT_CONFIG)
     // file
     file, sheets, table, mapping, setMapping: (next: ColumnMapping) => { invalidateReview(); setMapping(next); }, selectFile, reparse,
     // preview
-    previewClassifications, fillRates, estimates, goToPreview,
+    previewClassifications, columnCoverage, estimates, goToPreview,
     repositoryLinks, repositoryReviews, repositoryChoicesNeeded, discoveringRepositories, discoverRepositories, chooseRepositoryFile, assetCache: assetCache.current,
     // job
     phase, progress, rows: rowsRef.current, rowsVersion,

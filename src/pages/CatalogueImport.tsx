@@ -197,7 +197,7 @@ export default function CatalogueImport() {
               mapping={imp.mapping}
               classifications={imp.previewClassifications}
               totalRows={imp.table.totalRows}
-              fillRates={imp.fillRates}
+              columnCoverage={imp.columnCoverage}
               estimatedFetches={imp.estimates.fetches}
               estimatedRepos={imp.estimates.repos}
             />

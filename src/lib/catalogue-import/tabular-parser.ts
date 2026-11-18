@@ -221,7 +221,14 @@ export async function parseTabularFile(
   const gridRowToOutputRow = new Map<number, number>();
   for (let r = headerRowIndex + 1; r < grid.length; r++) {
     const row = normalizeRow(grid[r] ?? [], width);
-    if (isBlankRow(row)) continue;
+    if (isBlankRow(row)) {
+      // A hyperlink can have an empty display label. Its target still makes
+      // this a populated row, even when sheet_to_json returns only blanks.
+      const hasTarget = worksheet && Array.from({ length: width }, (_, c) =>
+        cellLinkTarget(worksheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined),
+      ).some(Boolean);
+      if (!hasTarget) continue;
+    }
     gridRowToOutputRow.set(r, rows.length);
     // 1-based, matching Excel's own row gutter: grid row 0 is sheet row 1.
     sourceRowNumbers.push(r + 1);
@@ -240,7 +247,7 @@ export async function parseTabularFile(
           | undefined;
         // SheetJS exposes the hyperlink layer on `cell.l.Target`; `sheet_to_json`
         // never surfaces it, which is why we walk the cells separately.
-        const target = cell?.l?.Target;
+        const target = cellLinkTarget(cell);
         if (target) hyperlinks.set(`${outputRow},${c}`, target);
       }
     }
@@ -263,6 +270,18 @@ function normalizeUrl(value: string): string {
   return /^www\./i.test(value) ? `https://${value}` : value;
 }
 
+/** Read only a literal HYPERLINK target; never evaluate spreadsheet formulas. */
+function formulaHyperlink(value: string): string | null {
+  const match = value.match(/^\s*=?\s*HYPERLINK\s*\(\s*"((?:[^"]|"")*)"\s*[,;]/i);
+  if (!match) return null;
+  const target = match[1].replace(/""/g, '"').trim();
+  return /^(?:https?:\/\/|www\.)/i.test(target) ? normalizeUrl(target) : null;
+}
+
+function cellLinkTarget(cell?: XLSX.CellObject): string | null {
+  return cell?.l?.Target?.trim() || formulaHyperlink(cell?.f ?? '');
+}
+
 /**
  * The effective URL of a cell: the hyperlink target wins, otherwise the cell
  * text but only when it actually looks like a URL. Returns null when neither
@@ -282,8 +301,7 @@ export function cellUrl(
   const text = (table.rows[rowIndex]?.[colIndex] ?? '').trim();
   if (/^https?:\/\//i.test(text)) return text;
   if (/^www\./i.test(text)) return normalizeUrl(text);
-
-  return null;
+  return formulaHyperlink(text);
 }
 
 interface AliasCandidate {

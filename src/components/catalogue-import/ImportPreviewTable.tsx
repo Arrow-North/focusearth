@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { FIELD_LABELS } from '@/lib/catalogue-import/constants';
+import type { ColumnCoverage } from '@/lib/catalogue-import/column-coverage';
 import { cn } from '@/lib/utils';
 import {
   ASSET_FIELDS,
@@ -31,7 +32,7 @@ export interface ImportPreviewTableProps {
   mapping: ColumnMapping;
   classifications: Array<Partial<Record<AssetField, Classification | null>>>;
   totalRows: number;
-  fillRates: Record<AssetField, number>;
+  columnCoverage: Record<AssetField, ColumnCoverage>;
   estimatedFetches: number;
   estimatedRepos: number;
 }
@@ -64,7 +65,8 @@ const CLASS_LABELS: Record<LinkClass, string> = {
 
 function percent(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '0%';
-  return `${Math.round(Math.min(1, value) * 100)}%`;
+  const percentage = Math.min(1, value) * 100;
+  return percentage < 0.01 ? '<0.01%' : `${Number(percentage.toFixed(2))}%`;
 }
 
 function StatTile({
@@ -106,7 +108,7 @@ export function ImportPreviewTable({
   mapping,
   classifications,
   totalRows,
-  fillRates,
+  columnCoverage,
   estimatedFetches,
   estimatedRepos,
 }: ImportPreviewTableProps) {
@@ -161,15 +163,15 @@ export function ImportPreviewTable({
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Column fill rate</CardTitle>
+            <p className="text-xs text-muted-foreground">Calculated from all data rows. Populated cells and detected links are counted separately.</p>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-3">
             {ASSET_FIELDS.map(field => {
               const index = mapping?.[field] ?? null;
-              const rate = fillRates?.[field] ?? 0;
-              const filled =
-                totalRows > 0 ? Math.round(rate * totalRows) : 0;
+              const { filled, linked, total } = columnCoverage?.[field] ?? { filled: 0, linked: 0, total: totalRows ?? 0 };
+              const rate = total > 0 ? filled / total : 0;
               return (
-                <div key={field} className="min-w-0 rounded-lg border p-3">
+                <div key={field} data-column-coverage={field} className="min-w-0 rounded-lg border p-3">
                   <div className="truncate text-sm font-medium">
                     {FIELD_LABELS[field]}
                   </div>
@@ -185,14 +187,18 @@ export function ImportPreviewTable({
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {filled.toLocaleString()} of{' '}
-                          {(totalRows ?? 0).toLocaleString()} rows
+                          {total.toLocaleString()} rows filled
                         </span>
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {linked.toLocaleString()} {linked === 1 ? 'link' : 'links'} detected
+                        {filled > linked && <span className="text-[#A87110]"> · {(filled - linked).toLocaleString()} filled {filled - linked === 1 ? 'cell' : 'cells'} without a link</span>}
                       </div>
                       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                         <div
                           className="h-full rounded-full bg-[#7BA23F]"
                           style={{
-                            width: percent(rate),
+                            width: `${Math.min(1, Math.max(0, rate)) * 100}%`,
                           }}
                         />
                       </div>
@@ -283,7 +289,7 @@ export function ImportPreviewTable({
                               key={colIndex}
                               className="max-w-[18rem] bg-[#5B6FAF]/5 align-top"
                             >
-                              {!value ? (
+                              {!value.trim() && !classification ? (
                                 <span className="text-xs text-muted-foreground">
                                   —
                                 </span>
@@ -303,7 +309,7 @@ export function ImportPreviewTable({
                                           classification.kind}
                                       </Badge>
                                       <div className="truncate text-xs text-muted-foreground">
-                                        {value}
+                                        {value.trim() ? value : classification.fetchUrl}
                                       </div>
                                     </div>
                                   </TooltipTrigger>
