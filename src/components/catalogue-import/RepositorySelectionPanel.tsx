@@ -29,7 +29,7 @@ export function RepositorySelectionPanel({ importer }: { importer: ReturnType<ty
             <Button variant={review?.declined ? 'default' : 'outline'} aria-pressed={Boolean(review?.declined)} aria-label={`None of these for row ${link.sourceRow} ${FIELD_LABELS[link.field]}`} disabled={choicesLocked} onClick={() => importer.chooseRepositoryFile(link.key)}>None of these</Button>
             <Button size="sm" variant="ghost" disabled={importer.discoveringRepositories} onClick={() => importer.discoverRepositories(link.key)}>Retry discovery</Button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{review?.candidates.map(candidate => <ImportAssetCandidate key={candidate.id} candidate={candidate} selected={review.selectedId === candidate.id && !review.declined} disabled={choicesLocked} onSelect={() => importer.chooseRepositoryFile(link.key, candidate.id)} />)}</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">{review?.candidates.map(candidate => <ImportAssetCandidate key={candidate.id} candidate={candidate} selected={review.selectedId === candidate.id && !review.declined} disabled={choicesLocked} assetCache={importer.assetCache} onSelect={() => importer.chooseRepositoryFile(link.key, candidate.id)} />)}</div>
         </section>;
       })}
       <div className="flex items-center justify-between gap-2"><Button variant="outline" disabled={!currentPage} onClick={() => setPage(currentPage - 1)}>Previous collections</Button><span className="text-xs">Page {currentPage + 1} of {pages}</span><Button variant="outline" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>Next collections</Button></div>

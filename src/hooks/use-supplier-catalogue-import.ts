@@ -2,10 +2,9 @@ import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { parseCatalogueFile } from '@/lib/led-import/catalogue-parser';
 import { catalogueRequest, fileBase64 } from '@/lib/led-import/catalogue-api';
-import { omittedFields, rowBlockers, validateManualImage, type AssetCandidate, type DuplicateMatch, type RowReview } from '@/lib/led-import/import-review';
-import type { ImportLink } from '@/types/supplier-catalogue-import';
+import { ImportAssetCache, assetLinkKey } from '@/lib/led-import/asset-cache';
+import { omittedFields, rowBlockers, validateManualImage, type DuplicateMatch, type RowReview } from '@/lib/led-import/import-review';
 
-type Discovery = { candidates: AssetCandidate[]; sourceType: 'file' | 'folder' };
 export function useSupplierCatalogueImport() {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<RowReview[]>([]);
@@ -16,7 +15,8 @@ export function useSupplierCatalogueImport() {
   const [error, setError] = useState<string>();
   const importId = useRef(crypto.randomUUID());
   const active = useRef(false);
-  const cache = useRef(new Map<string, Promise<Discovery>>());
+  const assetCache = useRef<ImportAssetCache>();
+  if (!assetCache.current) assetCache.current = new ImportAssetCache(catalogueRequest);
 
   function updateRow(id: string, patch: Partial<RowReview>) {
     setRows(current => current.map(item => item.row.id === id ? { ...item, ...patch, error: undefined } : item));
@@ -24,7 +24,7 @@ export function useSupplierCatalogueImport() {
   async function parse(file: File, supplierId: number) {
     if (active.current) return;
     active.current = true;
-    setBusy('parsing'); setError(undefined); setRows([]); cache.current.clear();
+    setBusy('parsing'); setError(undefined); setRows([]); assetCache.current.clear();
     importId.current = crypto.randomUUID();
     try {
       const files = await parseCatalogueFile(file);
@@ -44,28 +44,25 @@ export function useSupplierCatalogueImport() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not prepare this catalogue.'); }
     finally { active.current = false; setBusy(null); }
   }
-  async function discoverLink(link: ImportLink, retry: boolean): Promise<Discovery> {
-    const key = `${link.kind}:${link.url}`;
-    if (retry) cache.current.delete(key);
-    let promise = cache.current.get(key);
-    if (!promise) {
-      promise = catalogueRequest<Discovery>({ action: 'discover', url: link.url, kind: link.kind });
-      cache.current.set(key, promise);
-      promise.catch(() => cache.current.delete(key));
-    }
-    return promise;
-  }
   async function discover(rowId?: string) {
     if (active.current) return;
     active.current = true; setBusy('discovering'); setError(undefined);
     const selected = rows.filter(item => !item.outcome && item.decision !== 'skip' && (!rowId || item.row.id === rowId));
+    // Refresh each distinct link once, even if this row uses it in all columns.
+    if (rowId) {
+      const refreshed = new Set<string>();
+      for (const item of selected) for (const link of item.row.links) {
+        const key = assetLinkKey(link.url);
+        if (!refreshed.has(key)) { assetCache.current.invalidate(link.url); refreshed.add(key); }
+      }
+    }
     setProgress({ completed: 0, total: selected.length });
     try {
       for (const [index, item] of selected.entries()) {
         for (const link of item.row.links) {
           if (link.kind === 'image' && item.manualImage) continue;
           try {
-            const discovery = await discoverLink(link, Boolean(rowId));
+            const discovery = await assetCache.current.discover(link.url, link.kind);
             setRows(current => current.map(value => {
               if (value.row.id !== item.row.id) return value;
               const previous = value.links[link.id];
@@ -162,7 +159,7 @@ export function useSupplierCatalogueImport() {
   }
   function reset() {
     if (active.current) return;
-    setRows([]); setFileName(''); setCompanyId(undefined); setError(undefined); cache.current.clear();
+    setRows([]); setFileName(''); setCompanyId(undefined); setError(undefined); assetCache.current.clear();
   }
-  return { rows, fileName, companyId, busy, progress, error, parse, discover, updateRow, selectCandidate, declineCandidate, omitImage, manualImage, commit, reset };
+  return { rows, fileName, companyId, busy, progress, error, parse, discover, updateRow, selectCandidate, declineCandidate, omitImage, manualImage, commit, reset, assetCache: assetCache.current };
 }

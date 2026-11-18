@@ -29,9 +29,8 @@ import {
 } from '@/lib/catalogue-import/constants';
 import { ASSET_FIELDS } from '@/types/catalogue-import';
 import { catalogueRequest } from '@/lib/led-import/catalogue-api';
-import { isDropboxUrl } from '@/lib/led-import/catalogue-parser';
+import { ImportAssetCache } from '@/lib/led-import/asset-cache';
 import { repositoryKey, repositoryNeedsChoice, type RepositoryLink, type RepositoryReview } from '@/lib/catalogue-import/repository-review';
-import type { AssetCandidate } from '@/lib/led-import/import-review';
 import type {
   AssetField,
   Classification,
@@ -121,7 +120,8 @@ export function useCatalogueImport(config: ImportConfig = DEFAULT_IMPORT_CONFIG)
   const repositoryDiscoveryActive = useRef(false);
   const reviewGeneration = useRef(0);
   const runActive = useRef(false);
-  const discoveryCache = useRef(new Map<string, Promise<{ candidates: AssetCandidate[]; sourceType: 'file' | 'folder' }>>());
+  const assetCache = useRef<ImportAssetCache>();
+  if (!assetCache.current) assetCache.current = new ImportAssetCache(catalogueRequest, true);
 
   const pausedRef = useRef(false);
   const cancelledRef = useRef(false);
@@ -131,7 +131,7 @@ export function useCatalogueImport(config: ImportConfig = DEFAULT_IMPORT_CONFIG)
   const invalidateReview = useCallback(() => {
     reviewGeneration.current++;
     rowsRef.current = [];
-    cacheRef.current.clear(); discoveryCache.current.clear();
+    cacheRef.current.clear(); assetCache.current.clear();
     repositoryDiscoveryActive.current = false;
     setDiscoveringRepositories(false);
     setRepositoryReviews({}); setDetectedRepositories(new Set());
@@ -259,24 +259,19 @@ export function useCatalogueImport(config: ImportConfig = DEFAULT_IMPORT_CONFIG)
 
   const discoverRepositories = useCallback(async (onlyKey?: string, onlyUndiscovered = false) => {
     if (repositoryDiscoveryActive.current) return;
-    if (!onlyKey && !onlyUndiscovered) discoveryCache.current.clear();
+    if (!onlyKey && !onlyUndiscovered) assetCache.current.clear();
+    if (onlyKey) {
+      const link = repositoryLinks.find(item => item.key === onlyKey);
+      if (link) assetCache.current.invalidate(link.url);
+    }
     repositoryDiscoveryActive.current = true; setDiscoveringRepositories(true);
     const generation = reviewGeneration.current;
     try {
       for (const link of repositoryLinks.filter(item => (!onlyKey || item.key === onlyKey) && (!onlyUndiscovered || !repositoryReviews[item.key]?.discovered))) {
         if (generation !== reviewGeneration.current) return;
         const kind = link.field === 'productImage' ? 'image' : 'document';
-        const cacheKey = `${kind}:${link.url}`;
-        if (onlyKey) discoveryCache.current.delete(cacheKey);
         try {
-          if (!isDropboxUrl(link.url)) throw new Error('Only public Dropbox file and folder collections are supported. Choose None of these to leave this field empty.');
-          let request = discoveryCache.current.get(cacheKey);
-          if (!request) {
-            request = catalogueRequest({ action: 'discover', url: link.url, kind, legacy: true });
-            discoveryCache.current.set(cacheKey, request);
-            request.catch(() => { if (generation === reviewGeneration.current && discoveryCache.current.get(cacheKey) === request) discoveryCache.current.delete(cacheKey); });
-          }
-          const result = await request;
+          const result = await assetCache.current.discover(link.url, kind);
           if (generation !== reviewGeneration.current) return;
           setRepositoryReviews(current => ({ ...current, [link.key]: {
             discovered: true, candidates: result.candidates,
@@ -745,7 +740,7 @@ export function useCatalogueImport(config: ImportConfig = DEFAULT_IMPORT_CONFIG)
     file, sheets, table, mapping, setMapping: (next: ColumnMapping) => { invalidateReview(); setMapping(next); }, selectFile, reparse,
     // preview
     previewClassifications, fillRates, estimates, goToPreview,
-    repositoryLinks, repositoryReviews, repositoryChoicesNeeded, discoveringRepositories, discoverRepositories, chooseRepositoryFile,
+    repositoryLinks, repositoryReviews, repositoryChoicesNeeded, discoveringRepositories, discoverRepositories, chooseRepositoryFile, assetCache: assetCache.current,
     // job
     phase, progress, rows: rowsRef.current, rowsVersion,
     startImport, pauseImport, resumeImport, cancelImport,

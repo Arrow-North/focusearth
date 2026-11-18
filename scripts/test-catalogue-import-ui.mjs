@@ -84,8 +84,9 @@ globalThis.__catalogueMock = {
       }
       if (failDiscoveryTransport) return { data: null, error: { name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function' } };
       if (body.url === unavailable) return { data: null, error: { message: 'Dropbox image is unavailable for import (HTTP 404).' } };
-      if (body.url === folder) return { data: { sourceType: 'folder', candidates: body.kind === 'image' ? [candidate('img1', 'front.jpg', 'image/jpeg'), candidate('img2', 'back.png', 'image/png')] : [candidate('doc1', 'spec.pdf', 'application/pdf'), candidate('doc2', 'instructions.pdf', 'application/pdf')] }, error: null };
+      if (body.url === folder) return { data: { sourceType: 'folder', candidates: [candidate('img1', 'front.jpg', 'image/jpeg'), candidate('img2', 'back.png', 'image/png'), candidate('doc1', 'spec.pdf', 'application/pdf'), candidate('doc2', 'instructions.pdf', 'application/pdf')] }, error: null };
       if (body.url === doc) return { data: { sourceType: 'folder', candidates: [candidate('reference', 'reference.pdf', 'application/pdf'), candidate('other', 'other.pdf', 'application/pdf')] }, error: null };
+      if (body.url === image) return { data: { sourceType: 'file', candidates: [candidate('single-image', 'photo.jpg', 'image/jpeg')] }, error: null };
       return { data: { sourceType: 'file', candidates: [body.kind === 'image' ? candidate('single-image', 'photo.jpg', 'image/jpeg') : candidate('single-doc', 'spec.pdf', 'application/pdf')] }, error: null };
     }
     if (body.action === 'commit') {
@@ -163,10 +164,12 @@ export async function run() {
     check(Array.from(fileSection('A','Product Image').querySelectorAll('button')).some(button => button.textContent.includes('front.jpg') && button.getAttribute('aria-pressed') === 'true'), 'finishing supplier discovery preserves an image chosen during discovery');
     check(rowCard('D').textContent.includes('Not available for import'), 'inaccessible images are called out');
     check(fileSection('A','Product Image').querySelectorAll('button:not([aria-label])').length === 2, 'image folders expose all candidates');
-    check(fileSection('A','Specifications').querySelectorAll('button:not([aria-label])').length === 2, 'document folders expose all candidates');
+    check(fileSection('A','Specifications').querySelectorAll('button:not([aria-label])').length === 4, 'document folders expose both images and documents from the shared listing');
     check(fileSection('B','Product Image').querySelector('[aria-pressed="true"]'), 'a single eligible image is selected automatically');
     check(document.querySelectorAll('img').length >= 2, 'image candidate thumbnails render');
     check(requests.filter(request => request.action === 'discover' && request.url === folder && request.kind === 'document').length === 1, 'repeated folder metadata is cached');
+    check(requests.filter(request => request.action === 'discover' && request.url === folder).length === 1, 'supplier columns share one discovery request across image and document kinds');
+    check(requests.filter(request => request.action === 'thumbnail' && request.candidateId === 'img1').length === 1, 'supplier columns share one preview request for the same image');
     await change(rowDecision('A'), 'update');
     check(rowCard('A').querySelector('[aria-label="Existing product for A"]').value === '17', 'single duplicate target is selected for explicit update');
     await choose('A', 'Specifications', 'spec.pdf');
@@ -224,7 +227,9 @@ export async function run() {
     await choose('A', 'Product Image', 'front.jpg');
     for (const label of ['Specifications', 'Installation Instructions', 'Product Image']) await click(fileSection('A',label).querySelector('[aria-label^="None of these"]'));
     check(!fileSection('A','Product Image').querySelector('button:not([aria-label])[aria-pressed="true"]'), 'declining a selected image clears its old card selection');
+    const beforeRowRefresh = requests.filter(request => request.action === 'discover' && request.url === folder).length;
     await click(Array.from(rowCard('A').querySelectorAll('button')).find(button => button.textContent.startsWith('Discover / refresh')));
+    check(requests.filter(request => request.action === 'discover' && request.url === folder).length === beforeRowRefresh + 1, 'supplier row refresh fetches a repeated link once across its three columns');
     check(fileSection('A','Product Image').querySelector('[aria-label^="None of these"]').getAttribute('aria-pressed') === 'true', 'refresh preserves explicit None');
     check(!findButton('Import reviewed products').disabled, 'explicit None for each hyperlink permits an imageless product import');
     const beforeOmissions = requests.filter(request => request.action === 'commit').length;
@@ -292,11 +297,15 @@ export async function run() {
     check(document.body.textContent.includes('Supabase project') && document.body.textContent.includes('CORS'), 'transport failure guidance identifies deployment and browser access checks');
     check(!document.body.textContent.includes('Failed to send a request to the Edge Function'), 'generic SDK transport error is replaced with actionable guidance');
     failDiscoveryTransport = false;
+    const beforeSharedDiscovery = requests.filter(request => request.action === 'discover').length;
+    const beforeSharedPreview = requests.filter(request => request.action === 'thumbnail' && request.candidateId === 'img1').length;
     await click(findButton('Refresh collection files'));
     const collection = key => document.querySelector('[data-repository-key="' + key + '"]');
     const selectLegacy = async (key, name) => click(Array.from(collection(key).querySelectorAll('button')).find(button => button.textContent.includes(name)));
     check(findButton('Start Import').disabled, 'collection fields block import while choices remain undecided');
     check(collection('0:productImage').querySelectorAll('img').length === 2, 'legacy image collection shows all image thumbnails');
+    check(requests.filter(request => request.action === 'discover').length === beforeSharedDiscovery + 1, 'CSV utility reuses one listing across rows and all three columns');
+    check(requests.filter(request => request.action === 'thumbnail' && request.candidateId === 'img1').length === beforeSharedPreview + 1, 'CSV utility reuses one image preview across all repeated cards');
     await selectLegacy('0:specifications','spec.pdf');
     await selectLegacy('0:installationInstructions','None of these');
     await selectLegacy('0:productImage','front.jpg');
@@ -305,7 +314,7 @@ export async function run() {
     check(!findButton('Start Import').disabled, 'all independent collection decisions enable import');
     const beforeRefresh = requests.filter(request => request.action === 'discover').length;
     await click(findButton('Refresh collection files'));
-    check(requests.filter(request => request.action === 'discover').length === beforeRefresh + 2, 'refresh fetches fresh image and document listings while sharing metadata for repeated links');
+    check(requests.filter(request => request.action === 'discover').length === beforeRefresh + 1, 'refresh fetches one fresh listing shared by all rows and image/document columns');
     check(collection('0:installationInstructions').querySelector('[aria-label^="None of these"]').getAttribute('aria-pressed') === 'true', 'refresh preserves an explicit None choice');
     check(Array.from(collection('1:productImage').querySelectorAll('button')).some(button => button.textContent.includes('back.png') && button.getAttribute('aria-pressed') === 'true'), 'refresh preserves a still-valid selected image');
     const beforeStore = requests.filter(request => request.action === 'store-asset').length;
@@ -326,7 +335,7 @@ export async function run() {
     const pendingCsv = ['Manufacturer,Order Code,Specifications,Product Image',
       ['Maker','P1',folder,folder].join(','), ['Maker','P2','',doc].join(',')].join('\n');
     await upload(document.querySelector('input[type="file"]'), new File([pendingCsv], 'Fixtures.csv', {type:'text/csv'}));
-    const legacyDiscovery = holdDiscovery(doc, 'image');
+    const legacyDiscovery = holdDiscovery(doc, 'document');
     await click(findButton('Preview')); await settle();
     check(legacyDiscovery.requested, 'CSV utility discovery remains in flight on a later folder');
     check(document.body.textContent.includes('Loading linked files… You can choose files as they appear'), 'CSV utility distinguishes background discovery from a selection lock');
@@ -344,6 +353,29 @@ export async function run() {
     check(collection('0:specifications').textContent.includes('Selected: spec.pdf'), 'later discovery preserves a document selected while loading');
     check(collection('0:productImage').querySelector('button:not([aria-label])[aria-pressed="true"]'), 'later discovery preserves an image selected while loading');
     check(!findButton('Start Import').disabled, 'import enables once discovery and all choices finish');
+
+    // Repeated links also reuse previews when collection pagination remounts cards.
+    await act(async () => root.render(<div />));
+    await act(async () => root.render(<QueryClientProvider client={queryClient}><ProductFilePage /></QueryClientProvider>));
+    await click(findButton('Choose upload test company and type')); await click(findButton('Continue'));
+    const repeatedLink = folder + '?dl=0&subfolder_nav_tracking=1#preview';
+    const cachedCsv = ['Manufacturer,Order Code,Specifications,Installation Instructions,Product Image',
+      ['Maker','C1',folder,folder,folder].join(','), ['Maker','C2',repeatedLink,repeatedLink,repeatedLink].join(',')].join('\n');
+    const beforeCachedDiscovery = requests.filter(request => request.action === 'discover').length;
+    const beforeCachedPreviews = requests.filter(request => request.action === 'thumbnail').length;
+    await upload(document.querySelector('input[type="file"]'), new File([cachedCsv], 'Cached.csv', {type:'text/csv'}));
+    await click(findButton('Preview')); await settle();
+    check(requests.filter(request => request.action === 'discover').length === beforeCachedDiscovery + 1, 'a new upload gets its own cache and equivalent repeated links fetch once');
+    check(requests.filter(request => request.action === 'thumbnail').length === beforeCachedPreviews + 2, 'all visible repeated image cards share just two preview requests');
+    await click(findButton('Next collections'));
+    await selectLegacy('1:productImage','back.png');
+    await click(findButton('Previous collections'));
+    check(!collection('0:productImage').querySelector('button:not([aria-label])[aria-pressed="true"]'), 'cached images never copy another row’s selection');
+    await selectLegacy('0:productImage','front.jpg');
+    await click(findButton('Next collections'));
+    check(collection('1:productImage').querySelector('button:not([aria-label])[aria-pressed="true"]')?.textContent.includes('back.png'), 'returning to a row preserves its independent selected image');
+    check(requests.filter(request => request.action === 'thumbnail').length === beforeCachedPreviews + 2, 'paging away and back reuses completed image previews without network requests');
+    check(requests.filter(request => request.action === 'discover').length === beforeCachedDiscovery + 1, 'pagination never rediscovers a cached hyperlink');
 
     // A URL classified as a file can still be discovered as a collection by the backend.
     await act(async () => root.render(<div />));
